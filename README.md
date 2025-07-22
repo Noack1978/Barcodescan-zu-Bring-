@@ -164,6 +164,7 @@ sequence:
 ```
 
 ---
+Die Liste (entity_id: todo.kaufland) im Skript auf die eigene Entität ändern. 
 
 ## 📱 Binary Eye – Einrichtung
 
