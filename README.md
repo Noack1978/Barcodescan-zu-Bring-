@@ -57,17 +57,6 @@ Füge diese Sensoren zu deiner `sensor.yaml` oder direkt in der Konfiguration hi
       Unbekannt
     {% endif %}
   scan_interval: 10
-
-- platform: rest
-  name: openproductfacts_product_name
-  resource_template: "https://world.openproductfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
-  value_template: >
-    {% if value_json.status == 1 %}
-      {{ value_json.product.product_name | default('Unbekannt') }}
-    {% else %}
-      Unbekannt
-    {% endif %}
-  scan_interval: 10
 ```
 
 ---
@@ -114,13 +103,10 @@ sequence:
       produktname: >-
         {% set name1 = states('sensor.openfoodfacts_product_name') %}
         {% set name2 = states('sensor.openbeautyfacts_product_name') %}
-        {% set name3 = states('sensor.openproductfacts_product_name') %}
         {% if name1 not in ['Unbekannt', 'Unknown', ''] %}
           {{ name1 }}
         {% elif name2 not in ['Unbekannt', 'Unknown', ''] %}
-          {{ name2 }}
-        {% elif name3 not in ['Unbekannt', 'Unknown', ''] %}
-          {{ name3 }}
+          {{ name2 }} 
         {% else %}
           Unbekannt
         {% endif %}
@@ -129,7 +115,7 @@ sequence:
           - condition: template
             value_template: "{{ produktname in ['Unbekannt', 'Unknown', ''] }}"
         sequence:
-          - service: notify.mobile_app_mirko_s_handy
+          - service: notify.mobile_app_dein-gerätename
             data:
               title: Produkt nicht gefunden
               message: |
@@ -164,7 +150,7 @@ sequence:
 ```
 
 ---
-Die Liste (entity_id: todo.kaufland) im Skript auf die eigene Entität ändern. 
+Die Einkaufsiste (entity_id: todo.kaufland) und die des mobilen Geräts im Skript auf die eigenen Entitäten ändern. 
 
 ## 📱 Binary Eye – Einrichtung
 
