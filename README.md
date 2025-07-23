@@ -41,7 +41,11 @@ Füge diese Sensoren zu deiner `sensor.yaml` oder direkt in der Konfiguration hi
   resource_template: "https://world.openfoodfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
   value_template: >
     {% if value_json.status == 1 %}
-      {{ value_json.product.product_name | default('Unbekannt') }}
+      {% set name = value_json.product.product_name | default('') %}
+      {% set brand = value_json.product.brands | default('') %}
+      {% set qty = value_json.product.quantity | default('') %}
+      {% set result = [name, brand, qty] | select('string') | reject('equalto', '') | list | join(' – ') %}
+      {{ result if result else 'Unbekannt' }}
     {% else %}
       Unbekannt
     {% endif %}
@@ -52,18 +56,11 @@ Füge diese Sensoren zu deiner `sensor.yaml` oder direkt in der Konfiguration hi
   resource_template: "https://world.openbeautyfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
   value_template: >
     {% if value_json.status == 1 %}
-      {{ value_json.product.product_name | default('Unbekannt') }}
-    {% else %}
-      Unbekannt
-    {% endif %}
-  scan_interval: 10
-
-- platform: rest
-  name: openproductfacts_product_name
-  resource_template: "https://world.openproductfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
-  value_template: >
-    {% if value_json.status == 1 %}
-      {{ value_json.product.product_name | default('Unbekannt') }}
+      {% set name = value_json.product.product_name | default('') %}
+      {% set brand = value_json.product.brands | default('') %}
+      {% set qty = value_json.product.quantity | default('') %}
+      {% set result = [name, brand, qty] | select('string') | reject('equalto', '') | list | join(' – ') %}
+      {{ result if result else 'Unbekannt' }}
     {% else %}
       Unbekannt
     {% endif %}
