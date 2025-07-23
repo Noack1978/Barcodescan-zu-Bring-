@@ -161,7 +161,7 @@ sequence:
             sequence:
               - data:
                   entity_id: todo.einkaufsliste
-                  item: "{{ produktname | trim }}"
+                  item: "{{ produktname }}"
                 action: todo.add_item
 
       - delay: "00:00:01"
