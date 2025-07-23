@@ -53,7 +53,7 @@ http://<HA_IP>:8123/api/webhook/barcode_scan?content={CODE}
 
 Header:
 ```
-Content-Type: application/x-www-form-urlencoded
+Content-Type: application/json
 ```
 
 ## Beispiel Automatisierungsskript
