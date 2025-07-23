@@ -1,23 +1,39 @@
-# Barcode-Scan zu Bring! / Home Assistant Integration
+# 📦 Barcode-Scan → Bring!-Einkaufsliste (Home Assistant + Binary Eye)
 
-Mit dieser Integration kannst du mithilfe der App *Binary Eye* Barcodes scannen und Ã¼ber einen Webhook an Home Assistant senden. Das Produkt wird automatisch identifiziert und zur Einkaufsliste (z.â€¯B. Bring! oder Home Assistant Todo) hinzugefÃ¼gt.
+Mit dieser Integration kannst du mithilfe der Android-App **Binary Eye** einen Barcode scannen, und Home Assistant fügt das erkannte Produkt automatisch deiner **Bring!-Einkaufsliste** hinzu.
 
-## Voraussetzungen
+---
 
-- Home Assistant
-- REST-API Zugriff erlaubt
-- App: [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
-- Integration einer Einkaufsliste (`todo`, z.â€¯B. Bring! oder HA Todo)
-- Zwei REST-Sensoren:
-  - `sensor.openfoodfacts_product_name`
-  - `sensor.openbeautyfacts_product_name`
+## 🧰 Voraussetzungen
 
-## Notwendige Helfer
+- Home Assistant (lokal erreichbar)
+- Android-App [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
+- REST-API Zugriff auf OpenFoodFacts, OpenBeautyFacts und OpenProductFacts
+- Bring!-Integration (`todo.kaufland` oder andere Liste)
 
-- `input_text.last_barcode`  
-- `input_boolean.barcode_processing`
+---
 
-## Sensoren (in `sensor.yaml` oder UI)
+## 🛠️ Benötigte Helfer (Helpers)
+
+Diese zwei Helfer müssen in deiner `configuration.yaml`, `helpers.yaml` oder per UI angelegt werden:
+
+```yaml
+input_boolean:
+  barcode_processing:
+    name: Barcode wird verarbeitet
+    initial: false
+
+input_text:
+  last_barcode:
+    name: Letzter gescannter Barcode
+    max: 20
+```
+
+---
+
+## 🌐 REST-Sensoren für Produkterkennung
+
+Füge diese Sensoren zu deiner `sensor.yaml` oder direkt in der Konfiguration hinzu:
 
 ```yaml
 - platform: rest
@@ -41,22 +57,50 @@ Mit dieser Integration kannst du mithilfe der App *Binary Eye* Barcodes scannen 
       Unbekannt
     {% endif %}
   scan_interval: 10
+
+- platform: rest
+  name: openproductfacts_product_name
+  resource_template: "https://world.openproductfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
+  value_template: >
+    {% if value_json.status == 1 %}
+      {{ value_json.product.product_name | default('Unbekannt') }}
+    {% else %}
+      Unbekannt
+    {% endif %}
+  scan_interval: 10
 ```
 
-## HTTP-Request in Binary Eye
+---
 
-POST an URL (ersetzt `<TOKEN>` durch deinen Webhook):
+## 🤖 Automation: Barcode → Skript starten
 
-```
-http://<HA_IP>:8123/api/webhook/barcode_scan?content={CODE}
+```yaml
+alias: Barcode → bring.barcode speichern
+trigger:
+  - platform: webhook
+    webhook_id: barcode_scan
+    allowed_methods:
+      - POST
+    local_only: false
+condition:
+  - condition: state
+    entity_id: input_boolean.barcode_processing
+    state: "off"
+action:
+  - service: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.barcode_processing
+  - service: input_text.set_value
+    data:
+      entity_id: input_text.last_barcode
+      value: "{{ trigger.json.content }}"
+  - delay: "00:00:10"
+  - service: script.bring_barcode_verarbeiten
 ```
 
-Header:
-```
-Content-Type: application/json
-```
+---
 
-## Beispiel Automatisierungsskript
+## 📜 Skript: bring_barcode_verarbeiten
 
 ```yaml
 alias: bring_barcode_verarbeiten
@@ -93,7 +137,7 @@ sequence:
               title: Produkt nicht gefunden
               message: |
                 Barcode {{ barcode }} konnte keinem Produkt zugeordnet werden.
-            action: notify.mobile_app_<dein_gerÃ¤t>
+            action: notify.mobile_app_<dein_gerät>
           - delay: "00:00:01"
           - data:
               entity_id: input_text.last_barcode
@@ -129,3 +173,48 @@ sequence:
           entity_id: input_boolean.barcode_processing
         action: input_boolean.turn_off
 ```
+
+---
+
+## 📱 Binary Eye – Einrichtung
+
+> Lade die App hier herunter:  
+> 👉 [Binary Eye – Google Play](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
+
+### 🔗 Webhook-URL:
+
+```
+http://<HOME_ASSISTANT_IP>:8123/api/webhook/barcode_scan?content=
+```
+
+> Ersetze `<HOME_ASSISTANT_IP>` durch die IP deines Home Assistant-Systems (z. B. `192.168.178.70`)
+
+### ⚙️ Einstellungen in Binary Eye:
+
+- **Aktionstyp:** HTTP-POST  
+- **Methode:** `POST`  
+- **Content-Type:** `application/json`  
+- **Body:** (nicht möglich in Binary Eye – aber nicht nötig)
+
+---
+
+## 💡 Hinweise & Tipps
+
+- Du kannst das Skript erweitern, z. B. um:
+  - Alexa-Sprachausgabe
+  - Dashboard-Anzeige des letzten Scans
+  - Unterscheidung verschiedener Produktkategorien
+- Die Produktnamen werden nicht gespeichert, sondern direkt verarbeitet
+- Der `barcode_processing`-Helfer verhindert gleichzeitige Verarbeitung bei mehreren Scans
+
+---
+
+## 🧾 Lizenz
+
+MIT License – freie Verwendung & Weitergabe
+
+---
+
+## 💬 Fragen?
+
+Einfach ein Issue auf GitHub eröffnen oder über die Home Assistant Community Kontakt aufnehmen.
