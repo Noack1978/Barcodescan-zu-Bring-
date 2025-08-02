@@ -184,15 +184,14 @@ sequence:
 http://<HOME_ASSISTANT_IP>:8123/api/webhook/barcode_scan?content=
 ```
 
-> Ersetze `<HOME_ASSISTANT_IP>` durch die IP deines Home Assistant-Systems (z. B. `192.168.178.70`)
-> oder lass Nabu casa eine webhook link generieren (companion-App->cloud->webhook), dann funktioniert es auch unterwegs. 
+> Ersetze `<HOME_ASSISTANT_IP>` durch die IP deines Home Assistant-Systems (z. B. `192.168.170.17`)
+> oder lass Nabu casa einen webhook link generieren (companion-App->cloud->webhook), dann funktioniert es auch unterwegs. 
 
 ### ⚙️ Einstellungen in Binary Eye:
 
 - **Aktionstyp:** HTTP-POST  
 - **Methode:** `POST`  
-- **Content-Type:** `application/json`  
-- **Body:** (nicht möglich in Binary Eye – aber nicht nötig)
+- **Content-Type:** `application/json`
 
 ---
 
