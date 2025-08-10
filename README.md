@@ -65,6 +65,20 @@ Füge diese Sensoren zu deiner `sensor.yaml` oder direkt in der Konfiguration hi
       Unbekannt
     {% endif %}
   scan_interval: 10
+- platform: rest
+  name: openproductsfacts_product_name
+  resource_template: "https://world.openproductsfacts.org/api/v2/product/{{ states('input_text.last_barcode') }}.json"
+  value_template: >
+    {% if value_json.status == 1 %}
+      {% set name = value_json.product.product_name | default('') %}
+      {% set brand = value_json.product.brands | default('') %}
+      {% set qty = value_json.product.quantity | default('') %}
+      {% set result = [name, brand, qty] | select('string') | reject('equalto', '') | list | join(' – ') %}
+      {{ result if result else 'Unbekannt' }}
+    {% else %}
+      Unbekannt
+    {% endif %}
+  scan_interval: 10
 ```
 
 ---
@@ -107,34 +121,39 @@ sequence:
       entity_id: input_boolean.barcode_processing
     action: input_boolean.turn_on
     data: {}
-
   - variables:
       barcode: "{{ states('input_text.last_barcode') }}"
       produktname: >-
-        {% set name1 = states('sensor.openfoodfacts_product_name') %}
-        {% set name2 = states('sensor.openbeautyfacts_product_name') %}
-        {% if name1 not in ['Unbekannt', 'Unknown', ''] %}
+        {% set name1 = states('sensor.openfoodfacts_product_name') %}  {% set
+        name2 = states('sensor.openbeautyfacts_product_name') %}  {% set name3 =
+        states('sensor.openproductsfacts_product_name') %}  {% if name1 not in
+        ['Unbekannt', 'Unknown', ''] %}
           {{ name1 }}
         {% elif name2 not in ['Unbekannt', 'Unknown', ''] %}
           {{ name2 }}
+        {% elif name3 not in ['Unbekannt', 'Unknown', ''] %}
+          {{ name3 }} 
         {% else %}
           Unbekannt
         {% endif %}
-
   - choose:
       - conditions:
           - condition: template
             value_template: >-
-              {% set name1 = states('sensor.openfoodfacts_product_name') %}
-              {% set name2 = states('sensor.openbeautyfacts_product_name') %}
-              {% set produktname = (name1 if name1 not in ['Unbekannt', 'Unknown', ''] else (name2 if name2 not in ['Unbekannt', 'Unknown', ''] else 'Unbekannt')) %}
-              {{ produktname in ['Unbekannt', 'Unknown', ''] }}
+              {% set name1 = states('sensor.openfoodfacts_product_name') %} {%
+              set name2 = states('sensor.openbeautyfacts_product_name') %} {%
+              set name3 = states('sensor.openproductsfacts_product_name') %} {%
+              set produktname = (name1 if name1 not in ['Unbekannt',
+              'Unknown','']  else (name2 if name2 not in ['Unbekannt',
+              'Unknown', '']  else (name3 if name3 not in ['Unbekannt',
+              'Unknown', '']  else 'Unbekannt'))) %} {{ produktname in
+              ['Unbekannt', 'Unknown', ''] }}
         sequence:
           - data:
               title: Produkt nicht gefunden
               message: |
                 Barcode {{ barcode }} konnte keinem Produkt zugeordnet werden.
-            action: notify.mobile_app_<dein_gerät>
+            action: notify.mobile_app_mirko_s_handy
           - delay: "00:00:01"
           - data:
               entity_id: input_text.last_barcode
@@ -150,17 +169,15 @@ sequence:
             Barcode: {{ barcode }}
             Produkt: {{ produktname }}
         action: persistent_notification.create
-
       - choose:
           - conditions:
               - condition: template
                 value_template: "{{ produktname not in ['Unbekannt', 'Unknown', ''] }}"
             sequence:
               - data:
-                  entity_id: todo.einkaufsliste
-                  item: "{{ produktname }}"
+                  entity_id: todo.kaufland
+                  item: "{{ produktname | regex_replace('[–—]', '-') }}"
                 action: todo.add_item
-
       - delay: "00:00:01"
       - data:
           entity_id: input_text.last_barcode
