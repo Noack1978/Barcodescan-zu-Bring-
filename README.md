@@ -86,27 +86,35 @@ Füge diese Sensoren zu deiner `sensor.yaml` oder direkt in der Konfiguration hi
 ## 🤖 Automation: Barcode → Skript starten
 
 ```yaml
-alias: Barcode → bring.barcode speichern
+alias: Barcode → bring barcode speichern
 trigger:
   - platform: webhook
     webhook_id: barcode_scan
     allowed_methods:
       - POST
     local_only: false
-condition:
-  - condition: state
-    entity_id: input_boolean.barcode_processing
-    state: "off"
-action:
-  - service: input_boolean.turn_on
+actions:
+  - repeat:
+      while:
+        - condition: state
+          entity_id: input_boolean.barcode_processing
+          state: "on"
+        - condition: template
+          value_template: "{{ states('input_text.last_barcode') | trim | length > 0 }}"
+      sequence:
+        - delay: "00:00:02"
+
+  - action: input_text.set_value
     target:
-      entity_id: input_boolean.barcode_processing
-  - service: input_text.set_value
-    data:
       entity_id: input_text.last_barcode
+    data:
       value: "{{ trigger.json.content }}"
+
   - delay: "00:00:10"
-  - service: script.bring_barcode_verarbeiten
+
+  - action: script.bring_barcode_verarbeiten
+mode: queued
+max: 10
 ```
 
 ---
@@ -115,77 +123,60 @@ action:
 
 ```yaml
 alias: bring_barcode_verarbeiten
-mode: single
+mode: queued
 sequence:
-  - target:
+  - action: input_boolean.turn_on
+    target:
       entity_id: input_boolean.barcode_processing
-    action: input_boolean.turn_on
-    data: {}
+
   - variables:
       barcode: "{{ states('input_text.last_barcode') }}"
       produktname: >-
-        {% set name1 = states('sensor.openfoodfacts_product_name') %}  {% set
-        name2 = states('sensor.openbeautyfacts_product_name') %}  {% set name3 =
-        states('sensor.openproductsfacts_product_name') %}  {% if name1 not in
-        ['Unbekannt', 'Unknown', ''] %}
+        {% set name1 = states('sensor.openfoodfacts_product_name') %}
+        {% set name2 = states('sensor.openbeautyfacts_product_name') %}
+        {% set name3 = states('sensor.openproductsfacts_product_name') %}
+        {% if name1 not in ['Unbekannt', 'Unknown', ''] %}
           {{ name1 }}
         {% elif name2 not in ['Unbekannt', 'Unknown', ''] %}
           {{ name2 }}
         {% elif name3 not in ['Unbekannt', 'Unknown', ''] %}
-          {{ name3 }} 
+          {{ name3 }}
         {% else %}
           Unbekannt
         {% endif %}
+
   - choose:
       - conditions:
           - condition: template
-            value_template: >-
-              {% set name1 = states('sensor.openfoodfacts_product_name') %} {%
-              set name2 = states('sensor.openbeautyfacts_product_name') %} {%
-              set name3 = states('sensor.openproductsfacts_product_name') %} {%
-              set produktname = (name1 if name1 not in ['Unbekannt',
-              'Unknown','']  else (name2 if name2 not in ['Unbekannt',
-              'Unknown', '']  else (name3 if name3 not in ['Unbekannt',
-              'Unknown', '']  else 'Unbekannt'))) %} {{ produktname in
-              ['Unbekannt', 'Unknown', ''] }}
+            value_template: "{{ produktname in ['Unbekannt', 'Unknown', ''] }}"
         sequence:
-          - data:
+          - action: notify.mobile_app_mirko_s_handy
+            data:
               title: Produkt nicht gefunden
-              message: |
-                Barcode {{ barcode }} konnte keinem Produkt zugeordnet werden.
-            action: notify.mobile_app_mirko_s_handy
-          - delay: "00:00:01"
-          - data:
+              message: "Barcode {{ barcode }} konnte keinem Produkt zugeordnet werden."
+          - action: input_text.set_value
+            target:
               entity_id: input_text.last_barcode
-              value: Unbekannt
-            action: input_text.set_value
-          - data:
+            data:
+              value: ""
+          - action: input_boolean.turn_off
+            target:
               entity_id: input_boolean.barcode_processing
-            action: input_boolean.turn_off
     default:
-      - data:
-          title: Barcode verarbeitet
-          message: |
-            Barcode: {{ barcode }}
-            Produkt: {{ produktname }}
-        action: persistent_notification.create
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ produktname not in ['Unbekannt', 'Unknown', ''] }}"
-            sequence:
-              - data:
-                  entity_id: todo.kaufland
-                  item: "{{ produktname | regex_replace('[–—]', '-') }}"
-                action: todo.add_item
-      - delay: "00:00:01"
-      - data:
+      - action: todo.add_item
+        data:
+          entity_id: todo.kaufland
+          item: "{{ produktname | regex_replace('[–—]', '-') }}"
+
+      - action: input_text.set_value
+        target:
           entity_id: input_text.last_barcode
-          value: Unbekannt
-        action: input_text.set_value
-      - data:
+        data:
+          value: ""
+
+      - action: input_boolean.turn_off
+        target:
           entity_id: input_boolean.barcode_processing
-        action: input_boolean.turn_off
 ```
 
 ---
