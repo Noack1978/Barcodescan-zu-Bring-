@@ -6,84 +6,88 @@ Mit dieser Integration kannst du mithilfe der Android-App **Binary Eye** einen B
 
 ## 🧰 Voraussetzungen
 
-- Home Assistant (lokal erreichbar)
-- Android-App [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
-- REST-API Zugriff auf OpenFoodFacts, OpenBeautyFacts und OpenProductFacts
-- Bring!-Integration (`todo.kaufland` oder andere Liste)
+* Home Assistant (lokal erreichbar)
+* Android-App [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
+* REST-API Zugriff auf OpenFoodFacts, OpenBeautyFacts und OpenProductFacts
+* Bring!-Integration (`todo.kaufland` oder andere Liste)
 
 ---
 
 ## 🛠️ Benötigte Helfer (Helpers)
 
-Diese zwei Helfer müssen in deiner `configuration.yaml`, `helpers.yaml` oder per UI angelegt werden:
+Diese Helfer müssen in `input_text.yaml` und `input_boolean.yaml` (oder per UI) angelegt werden:
 
+**`input_boolean.yaml`**
 ```yaml
-input_boolean:
-  barcode_processing:
-    name: Barcode wird verarbeitet
-    initial: false
+barcode_processing:
+  name: Barcode wird verarbeitet
+  initial: false
+```
 
-input_text:
-  last_barcode:
-    name: Letzter gescannter Barcode
-    max: 20
+**`input_text.yaml`**
+```yaml
+last_barcode:
+  name: Letzter gescannter Barcode
+  max: 20
 ```
 
 ---
 
-## 🌐 REST-Sensoren für Produkterkennung
+## 🌐 REST-Sensoren für Produkterkennung (`sensors.yaml`)
 
-Füge diese Sensoren zu deiner `sensor.yaml` oder direkt in der Konfiguration hinzu:
+> ⚠️ `scan_interval: 86400` bedeutet, die Sensoren pollen **nicht** automatisch.  
+> Der Update wird ausschließlich per `homeassistant.update_entity` in der Automation ausgelöst – genau dann, wenn ein Barcode gescannt wurde.
 
 ```yaml
 - platform: rest
   name: openfoodfacts_product_name
   resource_template: "https://world.openfoodfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
   value_template: >
-    {% if value_json.status == 1 %}
+    {% if value_json is defined and value_json.status is defined and value_json.status == 1 %}
       {% set name = value_json.product.product_name | default('') %}
       {% set brand = value_json.product.brands | default('') %}
       {% set qty = value_json.product.quantity | default('') %}
-      {% set result = [name, brand, qty] | select('string') | reject('equalto', '') | list | join(' – ') %}
+      {% set result = [name, brand, qty] | select('ne', '') | list | join(' – ') %}
       {{ result if result else 'Unbekannt' }}
     {% else %}
       Unbekannt
     {% endif %}
-  scan_interval: 10
+  scan_interval: 86400
 
 - platform: rest
   name: openbeautyfacts_product_name
   resource_template: "https://world.openbeautyfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
   value_template: >
-    {% if value_json.status == 1 %}
+    {% if value_json is defined and value_json.status is defined and value_json.status == 1 %}
       {% set name = value_json.product.product_name | default('') %}
       {% set brand = value_json.product.brands | default('') %}
       {% set qty = value_json.product.quantity | default('') %}
-      {% set result = [name, brand, qty] | select('string') | reject('equalto', '') | list | join(' – ') %}
+      {% set result = [name, brand, qty] | select('ne', '') | list | join(' – ') %}
       {{ result if result else 'Unbekannt' }}
     {% else %}
       Unbekannt
     {% endif %}
-  scan_interval: 10
+  scan_interval: 86400
+
 - platform: rest
   name: openproductsfacts_product_name
   resource_template: "https://world.openproductsfacts.org/api/v2/product/{{ states('input_text.last_barcode') }}.json"
   value_template: >
-    {% if value_json.status == 1 %}
+    {% if value_json is defined and value_json.status is defined and value_json.status == 1 %}
       {% set name = value_json.product.product_name | default('') %}
       {% set brand = value_json.product.brands | default('') %}
       {% set qty = value_json.product.quantity | default('') %}
-      {% set result = [name, brand, qty] | select('string') | reject('equalto', '') | list | join(' – ') %}
+      {% set result = [name, brand, qty] | select('ne', '') | list | join(' – ') %}
       {{ result if result else 'Unbekannt' }}
     {% else %}
       Unbekannt
     {% endif %}
-  scan_interval: 10
+  scan_interval: 86400
 ```
 
 ---
 
-## 🤖 Automation: Barcode → Skript starten
+## 🤖 Automation: Barcode → Sensoren aktualisieren → Skript starten (`automations.yaml`)
 
 ```yaml
 alias: Barcode → bring barcode speichern
@@ -94,32 +98,43 @@ trigger:
       - POST
     local_only: false
 actions:
+  # Warten falls gerade noch ein Scan verarbeitet wird
   - repeat:
       while:
         - condition: state
           entity_id: input_boolean.barcode_processing
           state: "on"
-        - condition: template
-          value_template: "{{ states('input_text.last_barcode') | trim | length > 0 }}"
       sequence:
         - delay: "00:00:02"
 
+  # Barcode speichern
   - action: input_text.set_value
     target:
       entity_id: input_text.last_barcode
     data:
       value: "{{ trigger.json.content }}"
 
-  - delay: "00:00:10"
+  # Alle 3 Sensoren sofort aktualisieren (erzwingt API-Call)
+  - action: homeassistant.update_entity
+    target:
+      entity_id:
+        - sensor.openfoodfacts_product_name
+        - sensor.openbeautyfacts_product_name
+        - sensor.openproductsfacts_product_name
 
+  # Kurz warten bis alle 3 API-Antworten da sind
+  - delay: "00:00:05"
+
+  # Skript ausführen
   - action: script.bring_barcode_verarbeiten
+
 mode: queued
 max: 10
 ```
 
 ---
 
-## 📜 Skript: bring_barcode_verarbeiten
+## 📜 Skript: bring\_barcode\_verarbeiten (`scripts.yaml`)
 
 ```yaml
 alias: bring_barcode_verarbeiten
@@ -192,25 +207,45 @@ sequence:
 http://<HOME_ASSISTANT_IP>:8123/api/webhook/barcode_scan?content=
 ```
 
-> Ersetze `<HOME_ASSISTANT_IP>` durch die IP deines Home Assistant-Systems (z. B. `192.168.170.17`)
-> oder lass Nabu casa einen webhook link generieren (companion-App->cloud->webhook), dann funktioniert es auch unterwegs. 
+> Ersetze `<HOME_ASSISTANT_IP>` durch die IP deines Home Assistant-Systems (z. B. `192.168.170.17`)  
+> oder lass Nabu Casa einen Webhook-Link generieren (Companion-App → Cloud → Webhook), dann funktioniert es auch unterwegs.
 
 ### ⚙️ Einstellungen in Binary Eye:
 
-- **Aktionstyp:** HTTP-POST  
-- **Methode:** `POST`  
-- **Content-Type:** `application/json`
+* **Aktionstyp:** HTTP-POST
+* **Methode:** `POST`
+* **Content-Type:** `application/json`
+
+---
+
+## 🔄 Ablauf
+
+```
+Barcode scannen (Binary Eye)
+        ↓
+Webhook empfangen
+        ↓
+input_text.last_barcode = "4xxxxxxxxx"
+        ↓
+update_entity → alle 3 APIs werden JETZT abgefragt
+        ↓
+5s warten (API-Antwortzeit)
+        ↓
+Skript liest sensor.xxx → Produkt → Bring!
+        ↓
+input_text.last_barcode = "" (bereinigt)
+```
 
 ---
 
 ## 💡 Hinweise & Tipps
 
-- Du kannst das Skript erweitern, z. B. um:
-  - Alexa-Sprachausgabe
-  - Dashboard-Anzeige des letzten Scans
-  - Unterscheidung verschiedener Produktkategorien
-- Die Produktnamen werden nicht gespeichert, sondern direkt verarbeitet
-- Der `barcode_processing`-Helfer verhindert gleichzeitige Verarbeitung bei mehreren Scans
+* Die Sensoren pollen **nicht** automatisch – Updates erfolgen nur bei Barcode-Scan
+* Der `barcode_processing`-Helfer verhindert gleichzeitige Verarbeitung bei mehreren Scans
+* Du kannst das Skript erweitern, z. B. um:
+  + Alexa-Sprachausgabe
+  + Dashboard-Anzeige des letzten Scans
+  + Unterscheidung verschiedener Produktkategorien
 
 ---
 
