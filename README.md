@@ -91,21 +91,73 @@ last_barcode:
 
 ```yaml
 alias: Barcode → bring barcode speichern
-trigger:
-  - platform: webhook
-    webhook_id: barcode_scan
+
+triggers:
+  - webhook_id: barcode_scan
     allowed_methods:
       - POST
     local_only: false
+    trigger: webhook
+
 actions:
-  # Warten falls gerade noch ein Scan verarbeitet wird
-  - repeat:
-      while:
-        - condition: state
-          entity_id: input_boolean.barcode_processing
-          state: "on"
-      sequence:
-        - delay: "00:00:02"
+
+  # Maximal 1 Minute warten bis Verarbeitung frei ist
+  - wait_template: >
+      {{ is_state('input_boolean.barcode_processing', 'off') }}
+    timeout: "00:01:00"
+    continue_on_timeout: true
+
+  # Falls Verarbeitung weiterhin blockiert ist
+  - if:
+      - condition: state
+        entity_id: input_boolean.barcode_processing
+        state: "on"
+    then:
+
+      # Push-Nachricht mit Aktionen
+      - action: notify.mobile_app_mirko_s_handy
+        data:
+          title: Barcode Verarbeitung blockiert
+          message: >
+            Die Barcode-Verarbeitung läuft seit über 1 Minute.
+          data:
+            actions:
+              - action: BARCODE_ABORT
+                title: Abbrechen
+
+              - action: BARCODE_UNLOCK
+                title: Verarbeitung freigeben
+
+      # Auf Antwort warten
+      - wait_for_trigger:
+
+          - trigger: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: BARCODE_ABORT
+
+          - trigger: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: BARCODE_UNLOCK
+
+      # Verarbeitung freigeben
+      - if:
+          - condition: template
+            value_template: >
+              {{ wait.trigger.event.data.action == 'BARCODE_UNLOCK' }}
+        then:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.barcode_processing
+
+      # Automation abbrechen
+      - if:
+          - condition: template
+            value_template: >
+              {{ wait.trigger.event.data.action == 'BARCODE_ABORT' }}
+        then:
+          - stop: Benutzer hat die Verarbeitung abgebrochen
 
   # Barcode speichern
   - action: input_text.set_value
@@ -114,7 +166,7 @@ actions:
     data:
       value: "{{ trigger.json.content }}"
 
-  # Alle 3 Sensoren sofort aktualisieren (erzwingt API-Call)
+  # Produktsensoren aktualisieren
   - action: homeassistant.update_entity
     target:
       entity_id:
@@ -122,10 +174,9 @@ actions:
         - sensor.openbeautyfacts_product_name
         - sensor.openproductsfacts_product_name
 
-  # Kurz warten bis alle 3 API-Antworten da sind
   - delay: "00:00:05"
 
-  # Skript ausführen
+  # Weiterverarbeitung starten
   - action: script.bring_barcode_verarbeiten
 
 mode: queued
