@@ -93,7 +93,7 @@ last_barcode:
 alias: Barcode → bring barcode speichern
 
 triggers:
-  - webhook_id: barcode_scan
+  - webhook_id: <Namen deines webhook>
     allowed_methods:
       - POST
     local_only: false
