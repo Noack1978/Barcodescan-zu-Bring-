@@ -14,9 +14,10 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 
 - Webhook-Empfänger mit **zufälliger, eindeutiger ID** (sicher, nicht erratbar)
 - **Parallele** Abfrage von OpenFoodFacts, OpenBeautyFacts und OpenProductsFacts
-- Eintrag in deine gewählte `todo`-Liste
+- Eintrag in die gewählte Bring!-Liste
 - Push-Benachrichtigung bei unbekanntem Produkt
-- Serielle Verarbeitung mehrerer Scans über eine interne Queue – kein Datenverlust
+- Serielle Verarbeitung mehrerer Scans über interne Queue – kein Scan geht verloren
+- Doppelscan-Erkennung (gleicher Barcode zweimal schnell hintereinander)
 
 ---
 
@@ -43,9 +44,9 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 
 1. **Einstellungen → Geräte & Dienste → + Integration hinzufügen**
 2. Nach „Barcode → Bring!" suchen
-3. **Schritt 1:** Bring!-Liste und Benachrichtigungsdienst aus den Dropdowns wählen
-4. **Schritt 2:** Die angezeigte Webhook-URL in Binary Eye eintragen
-5. Fertig – kein Neustart erforderlich
+3. **Schritt 1:** Bring!-Liste und Benachrichtigungsdienst aus den Dropdowns wählen → **Weiter**
+4. **Schritt 2:** Anleitung zur Webhook-Aktivierung lesen → **Fertig**
+5. **Webhook aktivieren:** Einstellungen → Integrationen → Webhooks → Webhook `barcode_bring_xxxxxxxx` aktivieren → URL wird angezeigt
 
 ---
 
@@ -53,14 +54,12 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 
 In Binary Eye unter **Einstellungen → Aktion bei Scan**:
 
-| Einstellung  | Wert                                          |
-|--------------|-----------------------------------------------|
-| Aktionstyp   | HTTP-POST                                     |
-| URL          | *(wird im Setup-Dialog angezeigt)*            |
-| Content-Type | `application/json`                            |
-| Body         | `{"content": "$barcode$"}`                    |
-
-Die vollständige Webhook-URL (lokal und ggf. Nabu Casa) wird direkt im zweiten Schritt des Setup-Dialogs angezeigt.
+| Einstellung  | Wert                                                    |
+|--------------|---------------------------------------------------------|
+| Aktionstyp   | HTTP-POST                                               |
+| URL          | *(aus HA Webhooks kopieren – siehe Einrichtung Schritt 5)* |
+| Content-Type | `application/json`                                      |
+| Body         | `{"content": "$barcode$"}`                              |
 
 ---
 
@@ -75,11 +74,12 @@ OpenFoodFacts + OpenBeautyFacts + OpenProductsFacts parallel abfragen
         ↓
 Ersten gefundenen Produktnamen verwenden
         ↓
-→ Gefunden:      Eintrag in Bring!-Liste
+→ Gefunden:       Eintrag in Bring!-Liste
 → Nicht gefunden: Push-Benachrichtigung
 ```
 
-Mehrere Scans hintereinander werden seriell aus der Queue verarbeitet – kein Scan geht verloren. Identische Barcodes in schneller Folge (Doppelscan) werden automatisch erkannt und nur einmal verarbeitet.
+Mehrere Scans hintereinander werden seriell aus der Queue verarbeitet.
+Identische Barcodes in schneller Folge werden nur einmal verarbeitet.
 
 ---
 
@@ -96,6 +96,7 @@ Mehrere Scans hintereinander werden seriell aus der Queue verarbeitet – kein S
 
 ### v2.0.0
 Vollständige Neuentwicklung als native HA Custom Integration (HACS-kompatibel).
+Kein YAML mehr nötig – alles läuft über den UI-Setup-Dialog.
 Siehe [Release Notes](https://github.com/Noack1978/Barcodescan-zu-Bring-/releases/tag/v2.0.0) für Details.
 
 ### v1.x
