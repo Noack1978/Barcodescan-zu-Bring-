@@ -1,1 +1,14 @@
-
+{
+  "domain": "barcode_bring",
+  "name": "Barcode → Bring! Einkaufsliste",
+  "version": "2.0.0",
+  "config_flow": true,
+  "documentation": "https://github.com/Noack1978/Barcodescan-zu-Bring-",
+  "issue_tracker": "https://github.com/Noack1978/Barcodescan-zu-Bring-/issues",
+  "codeowners": [
+    "@Noack1978"
+  ],
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "homeassistant": "2024.1.0"
+}
