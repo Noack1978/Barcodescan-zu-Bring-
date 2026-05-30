@@ -6,7 +6,7 @@
 
 Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** ein. **Keine manuelle YAML-Konfiguration nötig.**
 
-> **v2.0.0** – Vollständige Neuentwicklung als native HA Custom Integration
+> **v2.1.0** – Mehrere Benachrichtigungsgeräte, Konfiguration nachträglich änderbar
 
 ---
 
@@ -15,7 +15,7 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 - Webhook-Empfänger mit **zufälliger, eindeutiger ID** (sicher, nicht erratbar)
 - **Parallele** Abfrage von OpenFoodFacts, OpenBeautyFacts und OpenProductsFacts
 - Eintrag in die gewählte Bring!-Liste
-- Push-Benachrichtigung bei unbekanntem Produkt
+- Push-Benachrichtigung bei unbekanntem Produkt – an **alle** konfigurierten Geräte
 - Serielle Verarbeitung mehrerer Scans über interne Queue – kein Scan geht verloren
 - Doppelscan-Erkennung (gleicher Barcode zweimal schnell hintereinander)
 
@@ -44,9 +44,46 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 
 1. **Einstellungen → Geräte & Dienste → + Integration hinzufügen**
 2. Nach „Barcode → Bring!" suchen
-3. **Schritt 1:** Bring!-Liste und Benachrichtigungsdienst aus den Dropdowns wählen → **Weiter**
-4. **Schritt 2:** Anleitung zur Webhook-Aktivierung lesen → **Fertig**
-5. **Webhook aktivieren:** Einstellungen → Integrationen → Webhooks → Webhook `barcode_bring_xxxxxxxx` aktivieren → URL wird angezeigt
+3. **Schritt 1:** Benutzername eingeben, Bring!-Liste und Benachrichtigungsgeräte wählen
+4. **Schritt 2:** Webhook-Aktivierungsanleitung lesen → **Fertig**
+5. **Webhook aktivieren:** Einstellungen → Integrationen → Webhooks → Webhook `barcode_bring_xxxxxxxx` aktivieren → URL kopieren
+
+Für **mehrere Benutzer** die Integration einfach erneut hinzufügen – jede Instanz erhält eine eigene Webhook-URL und eigene Benachrichtigungsgeräte.
+
+---
+
+## 👥 Mehrere Benutzer einrichten
+
+Jeder Benutzer bekommt eine eigene Instanz der Integration mit eigenem Webhook,
+eigener Bring!-Liste und eigenen Benachrichtigungsgeräten.
+
+**Einrichtung für einen zweiten Benutzer (z. B. Sandra):**
+
+1. **Einstellungen → Geräte & Dienste → + Integration hinzufügen**
+2. Erneut „Barcode → Bring!" suchen und auswählen
+3. **Schritt 1:** Anderen Benutzernamen eingeben (z. B. `Sandra`), Liste und Gerät wählen
+4. **Schritt 2:** Webhook aktivieren – es wird ein **neuer** Webhook angelegt
+5. Die neue Webhook-URL in **Sandras** Binary Eye eintragen
+
+In Geräte & Dienste erscheinen dann zwei separate Einträge:
+- `Barcode → Bring! (Mirko)` – mit Mirkos Webhook-URL und Handy
+- `Barcode → Bring! (Sandra)` – mit Sandras Webhook-URL und Handy
+
+Scannt Mirko einen Barcode, geht die Benachrichtigung nur an Mirkos Gerät –
+und umgekehrt.
+
+---
+
+## 🔧 Konfiguration nachträglich ändern
+
+Einstellungen → Geräte & Dienste → **Barcode → Bring! (Name)** → **Konfigurieren**
+
+Dort können geändert werden:
+- Benutzername
+- Bring!-Liste
+- Benachrichtigungsgeräte (hinzufügen oder entfernen)
+
+Die Webhook-URL bleibt dabei unverändert – Binary Eye muss nicht neu eingerichtet werden.
 
 ---
 
@@ -54,12 +91,12 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 
 In Binary Eye unter **Einstellungen → Aktion bei Scan**:
 
-| Einstellung  | Wert                                                    |
-|--------------|---------------------------------------------------------|
-| Aktionstyp   | HTTP-POST                                               |
-| URL          | *(aus HA Webhooks kopieren – siehe Einrichtung Schritt 5)* |
-| Content-Type | `application/json`                                      |
-| Body         | `{"content": "$barcode$"}`                              |
+| Einstellung  | Wert                                                        |
+|--------------|-------------------------------------------------------------|
+| Aktionstyp   | HTTP-POST                                                   |
+| URL          | *(aus HA Webhooks kopieren – siehe Einrichtung Schritt 5)*  |
+| Content-Type | `application/json`                                          |
+| Body         | `{"content": "$barcode$"}`                                  |
 
 ---
 
@@ -75,11 +112,8 @@ OpenFoodFacts + OpenBeautyFacts + OpenProductsFacts parallel abfragen
 Ersten gefundenen Produktnamen verwenden
         ↓
 → Gefunden:       Eintrag in Bring!-Liste
-→ Nicht gefunden: Push-Benachrichtigung
+→ Nicht gefunden: Push-Benachrichtigung an alle konfigurierten Geräte
 ```
-
-Mehrere Scans hintereinander werden seriell aus der Queue verarbeitet.
-Identische Barcodes in schneller Folge werden nur einmal verarbeitet.
 
 ---
 
@@ -89,15 +123,20 @@ Identische Barcodes in schneller Folge werden nur einmal verarbeitet.
 - Keine Helfer (`input_text`, `input_boolean`) oder REST-Sensoren nötig
 - Kein YAML-Eintrag in `configuration.yaml` erforderlich
 - Kompatibel mit jeder `todo`-Entity (nicht nur Bring!)
+- Mehrere Benutzer möglich – je eine Integration pro Person
 
 ---
 
 ## 📋 Changelog
 
+### v2.1.0
+- Mehrere Benachrichtigungsgeräte gleichzeitig wählbar
+- Konfiguration (Benutzername, Liste, Geräte) nachträglich änderbar ohne Neueinrichtung
+- Webhook-URL bleibt bei Konfigurationsänderungen erhalten
+
 ### v2.0.0
 Vollständige Neuentwicklung als native HA Custom Integration (HACS-kompatibel).
 Kein YAML mehr nötig – alles läuft über den UI-Setup-Dialog.
-Siehe [Release Notes](https://github.com/Noack1978/Barcodescan-zu-Bring-/releases/tag/v2.0.0) für Details.
 
 ### v1.x
 YAML-basierte Lösung mit Automationen, Skripten und REST-Sensoren.
