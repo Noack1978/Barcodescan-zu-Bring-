@@ -20,7 +20,8 @@ from .const import (
     API_OPENFOOD,
     API_OPENPRODUCTS,
     CONF_BRING_LIST,
-    CONF_NOTIFY_SERVICE,
+    CONF_NOTIFY_SERVICES,
+    CONF_USER_NAME,
     CONF_WEBHOOK_ID,
     DOMAIN,
     UNKNOWN_VALUES,
@@ -35,11 +36,9 @@ class BarcodeBringData:
 
     queue: asyncio.Queue[str]
     worker: asyncio.Task[None]
-    # Set der aktuell in der Queue wartenden Barcodes (Doppelscan-Schutz)
     queued_barcodes: set[str]
 
 
-# Typ-Alias für typsichere Nutzung von entry.runtime_data
 type BarcodeBringConfigEntry = ConfigEntry[BarcodeBringData]
 
 
@@ -55,7 +54,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         name=f"barcode_bring_worker_{webhook_id}",
     )
 
-    # Laufzeitdaten in entry.runtime_data speichern (moderner HA-Standard)
     entry.runtime_data = BarcodeBringData(
         queue=queue,
         worker=worker_task,
@@ -70,7 +68,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         _handle_webhook,
         allowed_methods=["POST"],
     )
-    _LOGGER.info("Barcode → Bring!: Webhook '%s' registriert", webhook_id)
+
+    # Konfigurationsänderungen (Options Flow) ohne Neustart übernehmen
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    user_name: str = entry.data.get(CONF_USER_NAME, "Unbekannt")
+    _LOGGER.info("Barcode → Bring! (%s): Webhook '%s' registriert", user_name, webhook_id)
 
     return True
 
@@ -91,8 +94,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry
     return True
 
 
+async def _async_update_listener(
+    hass: HomeAssistant, entry: BarcodeBringConfigEntry
+) -> None:
+    """Bei Konfigurationsänderung Entry neu laden – keine Daten gehen verloren."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Webhook-Handler – Barcode sofort in Queue legen und zurückkehren
+# Webhook-Handler
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _handle_webhook(
@@ -110,7 +120,6 @@ async def _handle_webhook(
         _LOGGER.warning("Barcode → Bring!: Leerer Barcode empfangen")
         return
 
-    # Zugriff über entry.runtime_data – kein hass.data nötig
     entry: BarcodeBringConfigEntry | None = next(
         (
             e
@@ -125,7 +134,6 @@ async def _handle_webhook(
 
     data: BarcodeBringData = entry.runtime_data
 
-    # Doppelscan-Schutz über eigenes Set (kein Zugriff auf private Queue-Internals)
     if barcode in data.queued_barcodes:
         _LOGGER.debug("Barcode → Bring!: '%s' bereits in Queue, übersprungen", barcode)
         return
@@ -138,7 +146,7 @@ async def _handle_webhook(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Worker – verarbeitet Queue nacheinander
+# Worker
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _barcode_worker(
@@ -177,22 +185,33 @@ async def _process_barcode(
 ) -> None:
     """Einen Barcode nachschlagen und in die Bring!-Liste eintragen."""
     bring_list: str = entry.data[CONF_BRING_LIST]
-    notify_service: str = entry.data[CONF_NOTIFY_SERVICE]
-    notify_domain, notify_name = notify_service.split(".", 1)
+
+    # Notify-Dienste: Liste – rückwärtskompatibel mit altem Einzelwert-String
+    notify_raw = entry.data.get(CONF_NOTIFY_SERVICES, [])
+    if isinstance(notify_raw, str):
+        notify_services: list[str] = [notify_raw]
+    else:
+        notify_services = list(notify_raw)
 
     produktname = await _lookup_product(barcode)
 
     if not produktname or produktname in UNKNOWN_VALUES:
         _LOGGER.info("Barcode → Bring!: Produkt nicht gefunden für '%s'", barcode)
-        await hass.services.async_call(
-            notify_domain,
-            notify_name,
-            {
-                "title": "Produkt nicht gefunden",
-                "message": f"Barcode {barcode} konnte keinem Produkt zugeordnet werden.",
-            },
-            blocking=False,
-        )
+        # Benachrichtigung an alle konfigurierten Geräte
+        for service in notify_services:
+            try:
+                notify_domain, notify_name = service.split(".", 1)
+                await hass.services.async_call(
+                    notify_domain,
+                    notify_name,
+                    {
+                        "title": "Produkt nicht gefunden",
+                        "message": f"Barcode {barcode} konnte keinem Produkt zugeordnet werden.",
+                    },
+                    blocking=False,
+                )
+            except Exception as err:
+                _LOGGER.warning("Benachrichtigung an '%s' fehlgeschlagen: %s", service, err)
         return
 
     clean_name = re.sub(r"[–—]", "-", produktname).strip()
@@ -207,7 +226,7 @@ async def _process_barcode(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Produktname aus APIs ermitteln
+# APIs
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _lookup_product(barcode: str) -> str | None:

@@ -3,10 +3,11 @@
     "step": {
       "user": {
         "title": "Barcode → Bring! einrichten",
-        "description": "Wähle deine Bring!-Liste und den Benachrichtigungsdienst.",
+        "description": "Richte die Integration für einen Benutzer ein. Für mehrere Benutzer kann die Integration mehrfach hinzugefügt werden.",
         "data": {
+          "user_name": "Name (z. B. Mirko)",
           "bring_list": "Bring!-Liste",
-          "notify_service": "Benachrichtigungsdienst"
+          "notify_services": "Benachrichtigungsgeräte (mehrere wählbar)"
         }
       },
       "webhook": {
@@ -16,11 +17,28 @@
     },
     "error": {
       "invalid_bring_list": "Die angegebene Liste wurde nicht gefunden. Prüfe die Entity-ID (muss mit 'todo.' beginnen).",
-      "invalid_notify": "Der Benachrichtigungsdienst wurde nicht gefunden. Prüfe den Namen (muss mit 'notify.' beginnen).",
+      "invalid_notify": "Mindestens ein Benachrichtigungsgerät muss ausgewählt werden.",
       "unknown": "Unbekannter Fehler."
     },
     "abort": {
-      "already_configured": "Barcode → Bring! ist bereits eingerichtet."
+      "already_configured": "Für diesen Benutzer ist Barcode → Bring! bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Barcode → Bring! konfigurieren",
+        "description": "Hier kannst du Benutzername, Bring!-Liste und Benachrichtigungsgeräte ändern. Die Webhook-URL bleibt unverändert.",
+        "data": {
+          "user_name": "Name",
+          "bring_list": "Bring!-Liste",
+          "notify_services": "Benachrichtigungsgeräte (mehrere wählbar)"
+        }
+      }
+    },
+    "error": {
+      "invalid_bring_list": "Die angegebene Liste wurde nicht gefunden. Prüfe die Entity-ID (muss mit 'todo.' beginnen).",
+      "invalid_notify": "Mindestens ein Benachrichtigungsgerät muss ausgewählt werden."
     }
   }
 }

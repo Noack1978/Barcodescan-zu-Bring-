@@ -2,8 +2,9 @@
 
 DOMAIN = "barcode_bring"
 
+CONF_USER_NAME = "user_name"
 CONF_BRING_LIST = "bring_list"
-CONF_NOTIFY_SERVICE = "notify_service"
+CONF_NOTIFY_SERVICES = "notify_services"  # Liste statt einzelner String
 CONF_WEBHOOK_ID = "webhook_id"
 
 # API URLs
