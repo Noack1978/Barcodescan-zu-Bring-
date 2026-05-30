@@ -1,271 +1,66 @@
-# 📦 Barcode-Scan → Bring!-Einkaufsliste (Home Assistant + Binary Eye)
+# 📦 Barcode → Bring! Einkaufsliste
 
-Mit dieser Integration kannst du mithilfe der Android-App **Binary Eye** einen Barcode scannen, und Home Assistant fügt das erkannte Produkt automatisch deiner **Bring!-Einkaufsliste** hinzu.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![GitHub release](https://img.shields.io/github/release/Noack1978/Barcodescan-zu-Bring-.svg)](https://github.com/Noack1978/Barcodescan-zu-Bring-/releases)
+[![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io)
+
+Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** ein. **Keine manuelle YAML-Konfiguration nötig.**
+
+> **v2.0.0** – Vollständige Neuentwicklung als native HA Custom Integration
+
+---
+
+## ✅ Was automatisch eingerichtet wird
+
+- Webhook-Empfänger mit **zufälliger, eindeutiger ID** (sicher, nicht erratbar)
+- **Parallele** Abfrage von OpenFoodFacts, OpenBeautyFacts und OpenProductsFacts
+- Eintrag in deine gewählte `todo`-Liste
+- Push-Benachrichtigung bei unbekanntem Produkt
+- Serielle Verarbeitung mehrerer Scans über eine interne Queue – kein Datenverlust
 
 ---
 
 ## 🧰 Voraussetzungen
 
-* Home Assistant (lokal erreichbar)
-* Android-App [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
-* REST-API Zugriff auf OpenFoodFacts, OpenBeautyFacts und OpenProductFacts
-* Bring!-Integration (`todo.kaufland` oder andere Liste)
+- Home Assistant 2024.1 oder neuer
+- Android-App [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
+- Bring!-Integration installiert (liefert eine `todo.xxx`-Entity)
+- Home Assistant Companion App (für Push-Benachrichtigungen)
 
 ---
 
-## 🛠️ Benötigte Helfer (Helpers)
+## 📥 Installation über HACS
 
-Diese Helfer müssen in `input_text.yaml` und `input_boolean.yaml` (oder per UI) angelegt werden:
-
-**`input_boolean.yaml`**
-```yaml
-barcode_processing:
-  name: Barcode wird verarbeitet
-  initial: false
-```
-
-**`input_text.yaml`**
-```yaml
-last_barcode:
-  name: Letzter gescannter Barcode
-  max: 20
-```
+1. HACS öffnen → **Integrationen** → ⋮ → **Benutzerdefinierte Repositories**
+2. URL eingeben: `https://github.com/Noack1978/Barcodescan-zu-Bring-`
+3. Kategorie: **Integration**
+4. **Hinzufügen** → Integration suchen und installieren
+5. Home Assistant **neu starten**
 
 ---
 
-## 🌐 REST-Sensoren für Produkterkennung (`sensors.yaml`)
+## ⚙️ Einrichtung
 
-> ⚠️ `scan_interval: 86400` bedeutet, die Sensoren pollen **nicht** automatisch.  
-> Der Update wird ausschließlich per `homeassistant.update_entity` in der Automation ausgelöst – genau dann, wenn ein Barcode gescannt wurde.
-
-```yaml
-- platform: rest
-  name: openfoodfacts_product_name
-  resource_template: "https://world.openfoodfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
-  value_template: >
-    {% if value_json is defined and value_json.status is defined and value_json.status == 1 %}
-      {% set name = value_json.product.product_name | default('') %}
-      {% set brand = value_json.product.brands | default('') %}
-      {% set qty = value_json.product.quantity | default('') %}
-      {% set result = [name, brand, qty] | select('ne', '') | list | join(' – ') %}
-      {{ result if result else 'Unbekannt' }}
-    {% else %}
-      Unbekannt
-    {% endif %}
-  scan_interval: 86400
-
-- platform: rest
-  name: openbeautyfacts_product_name
-  resource_template: "https://world.openbeautyfacts.org/api/v0/product/{{ states('input_text.last_barcode') }}.json"
-  value_template: >
-    {% if value_json is defined and value_json.status is defined and value_json.status == 1 %}
-      {% set name = value_json.product.product_name | default('') %}
-      {% set brand = value_json.product.brands | default('') %}
-      {% set qty = value_json.product.quantity | default('') %}
-      {% set result = [name, brand, qty] | select('ne', '') | list | join(' – ') %}
-      {{ result if result else 'Unbekannt' }}
-    {% else %}
-      Unbekannt
-    {% endif %}
-  scan_interval: 86400
-
-- platform: rest
-  name: openproductsfacts_product_name
-  resource_template: "https://world.openproductsfacts.org/api/v2/product/{{ states('input_text.last_barcode') }}.json"
-  value_template: >
-    {% if value_json is defined and value_json.status is defined and value_json.status == 1 %}
-      {% set name = value_json.product.product_name | default('') %}
-      {% set brand = value_json.product.brands | default('') %}
-      {% set qty = value_json.product.quantity | default('') %}
-      {% set result = [name, brand, qty] | select('ne', '') | list | join(' – ') %}
-      {{ result if result else 'Unbekannt' }}
-    {% else %}
-      Unbekannt
-    {% endif %}
-  scan_interval: 86400
-```
+1. **Einstellungen → Geräte & Dienste → + Integration hinzufügen**
+2. Nach „Barcode → Bring!" suchen
+3. **Schritt 1:** Bring!-Liste und Benachrichtigungsdienst aus den Dropdowns wählen
+4. **Schritt 2:** Die angezeigte Webhook-URL in Binary Eye eintragen
+5. Fertig – kein Neustart erforderlich
 
 ---
 
-## 🤖 Automation: Barcode → Sensoren aktualisieren → Skript starten (`automations.yaml`)
+## 📱 Binary Eye einrichten (einmalig manuell)
 
-```yaml
-alias: Barcode → bring barcode speichern
+In Binary Eye unter **Einstellungen → Aktion bei Scan**:
 
-triggers:
-  - webhook_id: <Namen deines webhook>
-    allowed_methods:
-      - POST
-    local_only: false
-    trigger: webhook
+| Einstellung  | Wert                                          |
+|--------------|-----------------------------------------------|
+| Aktionstyp   | HTTP-POST                                     |
+| URL          | *(wird im Setup-Dialog angezeigt)*            |
+| Content-Type | `application/json`                            |
+| Body         | `{"content": "$barcode$"}`                    |
 
-actions:
-
-  # Maximal 1 Minute warten bis Verarbeitung frei ist
-  - wait_template: >
-      {{ is_state('input_boolean.barcode_processing', 'off') }}
-    timeout: "00:01:00"
-    continue_on_timeout: true
-
-  # Falls Verarbeitung weiterhin blockiert ist
-  - if:
-      - condition: state
-        entity_id: input_boolean.barcode_processing
-        state: "on"
-    then:
-
-      # Push-Nachricht mit Aktionen
-      - action: notify.mobile_app_mirko_s_handy
-        data:
-          title: Barcode Verarbeitung blockiert
-          message: >
-            Die Barcode-Verarbeitung läuft seit über 1 Minute.
-          data:
-            actions:
-              - action: BARCODE_ABORT
-                title: Abbrechen
-
-              - action: BARCODE_UNLOCK
-                title: Verarbeitung freigeben
-
-      # Auf Antwort warten
-      - wait_for_trigger:
-
-          - trigger: event
-            event_type: mobile_app_notification_action
-            event_data:
-              action: BARCODE_ABORT
-
-          - trigger: event
-            event_type: mobile_app_notification_action
-            event_data:
-              action: BARCODE_UNLOCK
-
-      # Verarbeitung freigeben
-      - if:
-          - condition: template
-            value_template: >
-              {{ wait.trigger.event.data.action == 'BARCODE_UNLOCK' }}
-        then:
-          - action: input_boolean.turn_off
-            target:
-              entity_id: input_boolean.barcode_processing
-
-      # Automation abbrechen
-      - if:
-          - condition: template
-            value_template: >
-              {{ wait.trigger.event.data.action == 'BARCODE_ABORT' }}
-        then:
-          - stop: Benutzer hat die Verarbeitung abgebrochen
-
-  # Barcode speichern
-  - action: input_text.set_value
-    target:
-      entity_id: input_text.last_barcode
-    data:
-      value: "{{ trigger.json.content }}"
-
-  # Produktsensoren aktualisieren
-  - action: homeassistant.update_entity
-    target:
-      entity_id:
-        - sensor.openfoodfacts_product_name
-        - sensor.openbeautyfacts_product_name
-        - sensor.openproductsfacts_product_name
-
-  - delay: "00:00:05"
-
-  # Weiterverarbeitung starten
-  - action: script.bring_barcode_verarbeiten
-
-mode: queued
-max: 10
-```
-
----
-
-## 📜 Skript: bring\_barcode\_verarbeiten (`scripts.yaml`)
-
-```yaml
-alias: bring_barcode_verarbeiten
-mode: queued
-sequence:
-  - action: input_boolean.turn_on
-    target:
-      entity_id: input_boolean.barcode_processing
-
-  - variables:
-      barcode: "{{ states('input_text.last_barcode') }}"
-      produktname: >-
-        {% set name1 = states('sensor.openfoodfacts_product_name') %}
-        {% set name2 = states('sensor.openbeautyfacts_product_name') %}
-        {% set name3 = states('sensor.openproductsfacts_product_name') %}
-        {% if name1 not in ['Unbekannt', 'Unknown', ''] %}
-          {{ name1 }}
-        {% elif name2 not in ['Unbekannt', 'Unknown', ''] %}
-          {{ name2 }}
-        {% elif name3 not in ['Unbekannt', 'Unknown', ''] %}
-          {{ name3 }}
-        {% else %}
-          Unbekannt
-        {% endif %}
-
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ produktname in ['Unbekannt', 'Unknown', ''] }}"
-        sequence:
-          - action: notify.mobile_app_mirko_s_handy
-            data:
-              title: Produkt nicht gefunden
-              message: "Barcode {{ barcode }} konnte keinem Produkt zugeordnet werden."
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.last_barcode
-            data:
-              value: ""
-          - action: input_boolean.turn_off
-            target:
-              entity_id: input_boolean.barcode_processing
-    default:
-      - action: todo.add_item
-        data:
-          entity_id: todo.kaufland
-          item: "{{ produktname | regex_replace('[–—]', '-') }}"
-
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.last_barcode
-        data:
-          value: ""
-
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.barcode_processing
-```
-
----
-
-## 📱 Binary Eye – Einrichtung
-
-> Lade die App hier herunter:  
-> 👉 [Binary Eye – Google Play](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
-
-### 🔗 Webhook-URL:
-
-```
-http://<HOME_ASSISTANT_IP>:8123/api/webhook/barcode_scan?content=
-```
-
-> Ersetze `<HOME_ASSISTANT_IP>` durch die IP deines Home Assistant-Systems (z. B. `192.168.170.17`)  
-> oder lass Nabu Casa einen Webhook-Link generieren (Companion-App → Cloud → Webhook), dann funktioniert es auch unterwegs.
-
-### ⚙️ Einstellungen in Binary Eye:
-
-* **Aktionstyp:** HTTP-POST
-* **Methode:** `POST`
-* **Content-Type:** `application/json`
+Die vollständige Webhook-URL (lokal und ggf. Nabu Casa) wird direkt im zweiten Schritt des Setup-Dialogs angezeigt.
 
 ---
 
@@ -274,29 +69,37 @@ http://<HOME_ASSISTANT_IP>:8123/api/webhook/barcode_scan?content=
 ```
 Barcode scannen (Binary Eye)
         ↓
-Webhook empfangen
+Webhook empfangen → sofort in Queue eingereiht
         ↓
-input_text.last_barcode = "4xxxxxxxxx"
+OpenFoodFacts + OpenBeautyFacts + OpenProductsFacts parallel abfragen
         ↓
-update_entity → alle 3 APIs werden JETZT abgefragt
+Ersten gefundenen Produktnamen verwenden
         ↓
-5s warten (API-Antwortzeit)
-        ↓
-Skript liest sensor.xxx → Produkt → Bring!
-        ↓
-input_text.last_barcode = "" (bereinigt)
+→ Gefunden:      Eintrag in Bring!-Liste
+→ Nicht gefunden: Push-Benachrichtigung
 ```
+
+Mehrere Scans hintereinander werden seriell aus der Queue verarbeitet – kein Scan geht verloren. Identische Barcodes in schneller Folge (Doppelscan) werden automatisch erkannt und nur einmal verarbeitet.
 
 ---
 
-## 💡 Hinweise & Tipps
+## 💡 Hinweise
 
-* Die Sensoren pollen **nicht** automatisch – Updates erfolgen nur bei Barcode-Scan
-* Der `barcode_processing`-Helfer verhindert gleichzeitige Verarbeitung bei mehreren Scans
-* Du kannst das Skript erweitern, z. B. um:
-  + Alexa-Sprachausgabe
-  + Dashboard-Anzeige des letzten Scans
-  + Unterscheidung verschiedener Produktkategorien
+- Webhook-ID wird beim Setup zufällig generiert und bleibt dauerhaft erhalten
+- Keine Helfer (`input_text`, `input_boolean`) oder REST-Sensoren nötig
+- Kein YAML-Eintrag in `configuration.yaml` erforderlich
+- Kompatibel mit jeder `todo`-Entity (nicht nur Bring!)
+
+---
+
+## 📋 Changelog
+
+### v2.0.0
+Vollständige Neuentwicklung als native HA Custom Integration (HACS-kompatibel).
+Siehe [Release Notes](https://github.com/Noack1978/Barcodescan-zu-Bring-/releases/tag/v2.0.0) für Details.
+
+### v1.x
+YAML-basierte Lösung mit Automationen, Skripten und REST-Sensoren.
 
 ---
 
@@ -308,4 +111,4 @@ MIT License – freie Verwendung & Weitergabe
 
 ## 💬 Fragen?
 
-Einfach ein Issue auf GitHub eröffnen oder über die Home Assistant Community Kontakt aufnehmen.
+[Issue auf GitHub öffnen](https://github.com/Noack1978/Barcodescan-zu-Bring-/issues)
