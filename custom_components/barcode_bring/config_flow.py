@@ -6,7 +6,6 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.components.webhook import async_generate_url
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_BRING_LIST, CONF_NOTIFY_SERVICE, CONF_WEBHOOK_ID, DOMAIN
@@ -30,26 +29,6 @@ def _validate_notify(hass: HomeAssistant, service: str) -> bool:
     return len(parts) == 2 and bool(parts[1].strip())
 
 
-def _get_webhook_urls(hass: HomeAssistant, webhook_id: str) -> tuple[str, str | None]:
-    """Lokale und ggf. Nabu-Casa-Webhook-URL ermitteln."""
-    local_url = async_generate_url(hass, webhook_id)
-
-    nabu_url: str | None = None
-    try:
-        # Nabu Casa: cloud-Komponente laden und Remote-Base-URL ermitteln
-        cloud_component = hass.data.get("cloud")
-        if cloud_component is not None:
-            # Prüfen ob eingeloggt über das cloud-Objekt
-            if hasattr(cloud_component, "is_logged_in") and cloud_component.is_logged_in:
-                remote_url = getattr(cloud_component, "client", None)
-                if remote_url and hasattr(remote_url, "prefs"):
-                    remote_domain = getattr(remote_url.prefs, "remote_domain", None)
-                    if remote_domain:
-                        nabu_url = f"https://{remote_domain}/api/webhook/{webhook_id}"
-    except Exception:
-        pass
-
-    return local_url, nabu_url
 
 
 class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -132,7 +111,7 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_webhook(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Webhook-URL anzeigen – Nutzer bestätigt mit Weiter."""
+        """Schritt 2: Hinweis zur Webhook-Aktivierung in HA anzeigen."""
         if self._webhook_shown:
             return self.async_create_entry(
                 title="Barcode → Bring!",
@@ -141,21 +120,11 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._webhook_shown = True
         webhook_id: str = self._data[CONF_WEBHOOK_ID]
-        local_url, nabu_url = _get_webhook_urls(self.hass, webhook_id)
-
-        if nabu_url:
-            url_info = (
-                f"**Lokal (WLAN):**\n`{local_url}`\n\n"
-                f"**Unterwegs (Nabu Casa):**\n`{nabu_url}`"
-            )
-        else:
-            url_info = f"`{local_url}`"
 
         return self.async_show_form(
             step_id="webhook",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "webhook_url": url_info,
-                "body": '{"content": "$barcode$"}',
+                "webhook_id": webhook_id,
             },
         )
