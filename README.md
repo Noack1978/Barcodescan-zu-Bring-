@@ -96,7 +96,6 @@ In Binary Eye unter **Einstellungen → Aktion bei Scan**:
 | Aktionstyp   | HTTP-POST                                                   |
 | URL          | *(aus HA Webhooks kopieren – siehe Einrichtung Schritt 5)*  |
 | Content-Type | `application/json`                                          |
-| Body         | `{"content": "$barcode$"}`                                  |
 
 ---
 
