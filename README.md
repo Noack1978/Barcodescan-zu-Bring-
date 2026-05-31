@@ -4,7 +4,7 @@
 [![GitHub release](https://img.shields.io/github/release/Noack1978/Barcodescan-zu-Bring-.svg)](https://github.com/Noack1978/Barcodescan-zu-Bring-/releases)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io)
 
-Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** ein. **Keine manuelle YAML-Konfiguration nötig.**
+Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** oder auch andere Einkaufsliste ein. **Keine manuelle YAML-Konfiguration nötig.**
 
 > **v2.1.1** – Webhooks werden pro Benutzer eindeutig benannt
 
@@ -26,6 +26,7 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 - Home Assistant 2024.1 oder neuer
 - Android-App [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
 - Bring!-Integration installiert (liefert eine `todo.xxx`-Entity)
+- es geht auch jede andere Einkaufsliste
 - Home Assistant Companion App (für Push-Benachrichtigungen)
 
 ---
