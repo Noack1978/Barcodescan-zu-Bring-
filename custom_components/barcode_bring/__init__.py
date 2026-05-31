@@ -30,7 +30,6 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-
 @dataclasses.dataclass
 class BarcodeBringData:
     """Laufzeitdaten der Integration – gespeichert in entry.runtime_data."""
@@ -39,9 +38,7 @@ class BarcodeBringData:
     worker: asyncio.Task[None]
     queued_barcodes: set[str]
 
-
 BarcodeBringConfigEntry: TypeAlias = ConfigEntry[BarcodeBringData]
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry) -> bool:
     """Integration einrichten."""
@@ -70,14 +67,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         allowed_methods=["POST"],
     )
 
-    # Konfigurationsänderungen (Options Flow) ohne Neustart übernehmen
-    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
-
     user_name: str = entry.data.get(CONF_USER_NAME, "Unbekannt")
     _LOGGER.info("Barcode → Bring! (%s): Webhook '%s' registriert", user_name, webhook_id)
 
     return True
-
 
 async def async_unload_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry) -> bool:
     """Integration entfernen."""
@@ -93,14 +86,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry
 
     _LOGGER.info("Barcode → Bring!: Integration entladen")
     return True
-
-
-async def _async_update_listener(
-    hass: HomeAssistant, entry: BarcodeBringConfigEntry
-) -> None:
-    """Bei Konfigurationsänderung Entry neu laden – keine Daten gehen verloren."""
-    await hass.config_entries.async_reload(entry.entry_id)
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Webhook-Handler
@@ -145,7 +130,6 @@ async def _handle_webhook(
         "Barcode → Bring!: '%s' in Queue (%d wartend)", barcode, data.queue.qsize()
     )
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Worker
 # ──────────────────────────────────────────────────────────────────────────────
@@ -175,7 +159,6 @@ async def _barcode_worker(
         except asyncio.CancelledError:
             _LOGGER.debug("Barcode → Bring!: Worker beendet")
             break
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Barcode verarbeiten
@@ -225,7 +208,6 @@ async def _process_barcode(
         blocking=True,
     )
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # APIs
 # ──────────────────────────────────────────────────────────────────────────────
@@ -249,7 +231,6 @@ async def _lookup_product(barcode: str) -> str | None:
             return result
 
     return None
-
 
 async def _fetch_product_name(session: aiohttp.ClientSession, url: str) -> str:
     """Einen API-Endpunkt abfragen und Produktnamen extrahieren."""

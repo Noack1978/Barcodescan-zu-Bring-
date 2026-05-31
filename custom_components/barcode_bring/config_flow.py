@@ -6,7 +6,16 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .const import (
     CONF_BRING_LIST,
@@ -15,11 +24,6 @@ from .const import (
     CONF_WEBHOOK_ID,
     DOMAIN,
 )
-
-
-def _validate_bring_list(hass: HomeAssistant, entity_id: str) -> bool:
-    """Prüft ob die Todo-Entity existiert."""
-    return hass.states.get(entity_id) is not None and entity_id.startswith("todo.")
 
 
 def _get_todo_entities(hass: HomeAssistant) -> list[str]:
@@ -40,56 +44,74 @@ def _get_notify_services(hass: HomeAssistant) -> list[str]:
     )
 
 
-def _build_options_schema(
+def _build_schema(
     todo_entities: list[str],
     notify_services: list[str],
     current_user_name: str = "",
     current_bring_list: str = "",
     current_notify_services: list[str] | None = None,
 ) -> vol.Schema:
-    """Schema für Optionen-Formular bauen (wird für Setup und Options genutzt)."""
+    """Schema mit HA-Selektoren bauen (korrekte UI-Darstellung)."""
     if current_notify_services is None:
         current_notify_services = []
 
-    # todo-Feld
+    # Bring!-Liste: Dropdown-Selektor wenn Entities vorhanden
     if todo_entities:
-        bring_field: Any = vol.In(todo_entities)
+        bring_selector = SelectSelector(
+            SelectSelectorConfig(
+                options=[SelectOptionDict(value=e, label=e) for e in todo_entities],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
         bring_default = current_bring_list or todo_entities[0]
-        bring_key = vol.Required(CONF_BRING_LIST, default=bring_default)
     else:
-        bring_field = str
-        bring_key = vol.Required(
-            CONF_BRING_LIST,
-            description={"suggested_value": current_bring_list or "todo.einkaufsliste"},
-        )
+        bring_selector = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+        bring_default = current_bring_list or "todo.einkaufsliste"
 
-    # notify-Feld: Multi-Select wenn Dienste vorhanden
+    # Notify-Dienste: Multi-Select-Selektor wenn Dienste vorhanden
     if notify_services:
-        notify_field: Any = vol.All(
-            [vol.In(notify_services)],
-            vol.Length(min=1),
+        notify_selector = SelectSelector(
+            SelectSelectorConfig(
+                options=[SelectOptionDict(value=s, label=s) for s in notify_services],
+                multiple=True,
+                mode=SelectSelectorMode.LIST,
+            )
         )
-        notify_default = current_notify_services if current_notify_services else [notify_services[0]]
-        notify_key = vol.Required(CONF_NOTIFY_SERVICES, default=notify_default)
+        notify_default = current_notify_services if current_notify_services else notify_services[:1]
     else:
-        # Freitext als kommagetrennte Liste
-        notify_field = str
-        notify_key = vol.Required(
-            CONF_NOTIFY_SERVICES,
-            description={"suggested_value": ", ".join(current_notify_services) if current_notify_services else "notify.mobile_app_mein_handy"},
+        notify_selector = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+        notify_default = (
+            ", ".join(current_notify_services)
+            if current_notify_services
+            else "notify.mobile_app_mein_handy"
         )
 
     return vol.Schema(
         {
-            vol.Required(
-                CONF_USER_NAME,
-                default=current_user_name,
-            ): str,
-            bring_key: bring_field,
-            notify_key: notify_field,
+            vol.Required(CONF_USER_NAME, default=current_user_name): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT)
+            ),
+            vol.Required(CONF_BRING_LIST, default=bring_default): bring_selector,
+            vol.Required(CONF_NOTIFY_SERVICES, default=notify_default): notify_selector,
         }
     )
 
+
+def _parse_notify(raw: Any) -> list[str]:
+    """Notify-Eingabe normalisieren (Liste oder kommagetrennte Zeichenkette)."""
+    if isinstance(raw, str):
+        return [s.strip() for s in raw.split(",") if s.strip()]
+    return [s for s in list(raw) if s.strip()]
+
+
+def _validate_bring_list(hass: HomeAssistant, entity_id: str) -> bool:
+    """Prüft ob die Todo-Entity existiert."""
+    return hass.states.get(entity_id) is not None and entity_id.startswith("todo.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Config Flow
+# ──────────────────────────────────────────────────────────────────────────────
 
 class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config Flow für Barcode → Bring!."""
@@ -110,16 +132,12 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             user_name = user_input[CONF_USER_NAME].strip()
-            bring_list = user_input[CONF_BRING_LIST].strip() if isinstance(user_input[CONF_BRING_LIST], str) else user_input[CONF_BRING_LIST]
-            notify_raw = user_input[CONF_NOTIFY_SERVICES]
+            bring_list = user_input[CONF_BRING_LIST]
+            if isinstance(bring_list, str):
+                bring_list = bring_list.strip()
+            notify_services = _parse_notify(user_input[CONF_NOTIFY_SERVICES])
 
-            # Freitext-Eingabe (kommagetrennt) → Liste
-            if isinstance(notify_raw, str):
-                notify_services = [s.strip() for s in notify_raw.split(",") if s.strip()]
-            else:
-                notify_services = list(notify_raw)
-
-            # Unique ID pro Benutzer
+            # Unique ID pro Benutzer – verhindert Dopplungen
             await self.async_set_unique_id(f"{DOMAIN}_{user_name.lower()}")
             self._abort_if_unique_id_configured()
 
@@ -138,7 +156,7 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_build_options_schema(
+            data_schema=_build_schema(
                 _get_todo_entities(self.hass),
                 _get_notify_services(self.hass),
             ),
@@ -148,7 +166,7 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_webhook(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Hinweis zur Webhook-Aktivierung in HA anzeigen."""
+        """Schritt 2: Webhook-Aktivierungshinweis anzeigen."""
         if self._webhook_shown:
             user_name: str = self._data[CONF_USER_NAME]
             return self.async_create_entry(
@@ -157,71 +175,68 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         self._webhook_shown = True
-        webhook_id: str = self._data[CONF_WEBHOOK_ID]
-
         return self.async_show_form(
             step_id="webhook",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "webhook_id": webhook_id,
+                "webhook_id": self._data[CONF_WEBHOOK_ID],
             },
         )
 
     @staticmethod
+    @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Options Flow bereitstellen."""
-        return BarcodeBringOptionsFlow(config_entry)
+        return BarcodeBringOptionsFlow()
 
 
-class BarcodeBringOptionsFlow(config_entries.OptionsFlow):
+# ──────────────────────────────────────────────────────────────────────────────
+# Options Flow
+# Regeln:
+#   - Kein __init__, kein self.config_entry = ... (AttributeError seit HA 2025.12)
+#   - OptionsFlowWithReload: automatischer Reload nach Änderung, kein update_listener nötig
+#   - self.config_entry ist read-only Property – nur lesend verwenden
+# ──────────────────────────────────────────────────────────────────────────────
+
+class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
     """Options Flow – bestehende Konfiguration ändern."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self._entry = config_entry
 
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Einstellungen anzeigen und ändern."""
+        """Einstellungen anzeigen und speichern."""
         errors: dict[str, str] = {}
+
+        current_user_name: str = self.config_entry.data.get(CONF_USER_NAME, "")
+        current_bring_list: str = self.config_entry.data.get(CONF_BRING_LIST, "")
+        current_notify = self.config_entry.data.get(CONF_NOTIFY_SERVICES, [])
+        if isinstance(current_notify, str):
+            current_notify = [current_notify]
 
         todo_entities = _get_todo_entities(self.hass)
         notify_services = _get_notify_services(self.hass)
 
-        # Aktuelle Werte aus entry.data lesen
-        current_user_name: str = self._entry.data.get(CONF_USER_NAME, "")
-        current_bring_list: str = self._entry.data.get(CONF_BRING_LIST, "")
-        # Rückwärtskompatibel: alter Einzelwert-String → Liste
-        current_notify = self._entry.data.get(CONF_NOTIFY_SERVICES, [])
-        if isinstance(current_notify, str):
-            current_notify = [current_notify]
-
         if user_input is not None:
             new_user_name = user_input[CONF_USER_NAME].strip()
-            new_bring_list = user_input[CONF_BRING_LIST].strip() if isinstance(user_input[CONF_BRING_LIST], str) else user_input[CONF_BRING_LIST]
-            notify_raw = user_input[CONF_NOTIFY_SERVICES]
-
-            if isinstance(notify_raw, str):
-                new_notify = [s.strip() for s in notify_raw.split(",") if s.strip()]
-            else:
-                new_notify = list(notify_raw)
+            new_bring_list = user_input[CONF_BRING_LIST]
+            if isinstance(new_bring_list, str):
+                new_bring_list = new_bring_list.strip()
+            new_notify = _parse_notify(user_input[CONF_NOTIFY_SERVICES])
 
             if not _validate_bring_list(self.hass, new_bring_list):
                 errors[CONF_BRING_LIST] = "invalid_bring_list"
             elif not new_notify:
                 errors[CONF_NOTIFY_SERVICES] = "invalid_notify"
             else:
-                # Webhook-ID bleibt erhalten – nur die änderbaren Felder updaten
-                new_data = dict(self._entry.data)
+                new_data = dict(self.config_entry.data)
                 new_data[CONF_USER_NAME] = new_user_name
                 new_data[CONF_BRING_LIST] = new_bring_list
                 new_data[CONF_NOTIFY_SERVICES] = new_notify
 
-                # entry.data aktualisieren und Titel anpassen
                 self.hass.config_entries.async_update_entry(
-                    self._entry,
+                    self.config_entry,
                     title=f"Barcode → Bring! ({new_user_name})",
                     data=new_data,
                 )
@@ -229,12 +244,12 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=_build_options_schema(
+            data_schema=_build_schema(
                 todo_entities,
                 notify_services,
                 current_user_name=current_user_name,
                 current_bring_list=current_bring_list,
-                current_notify_services=current_notify,
+                current_notify_services=list(current_notify),
             ),
             errors=errors,
         )
