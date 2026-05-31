@@ -1,4 +1,4 @@
-# 📦 Barcode → Bring! Einkaufsliste
+# 📦 Barcode → Bring! oder andere Einkaufsliste
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/Noack1978/Barcodescan-zu-Bring-.svg)](https://github.com/Noack1978/Barcodescan-zu-Bring-/releases)
