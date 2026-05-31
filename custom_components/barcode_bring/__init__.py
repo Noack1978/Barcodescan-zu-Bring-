@@ -58,16 +58,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         queued_barcodes=queued_barcodes,
     )
 
+    user_name: str = entry.data.get(CONF_USER_NAME, "Unbekannt")
+
     webhook_register(
         hass,
         DOMAIN,
-        "Barcode Scan",
+        f"Barcode Scan ({user_name})",
         webhook_id,
         _handle_webhook,
         allowed_methods=["POST"],
     )
 
-    user_name: str = entry.data.get(CONF_USER_NAME, "Unbekannt")
     _LOGGER.info("Barcode → Bring! (%s): Webhook '%s' registriert", user_name, webhook_id)
 
     return True
