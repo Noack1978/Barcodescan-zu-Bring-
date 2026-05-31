@@ -6,6 +6,7 @@ import dataclasses
 import logging
 import re
 from typing import Any
+from typing import TypeAlias
 
 import aiohttp
 from homeassistant.components.webhook import (
@@ -39,7 +40,7 @@ class BarcodeBringData:
     queued_barcodes: set[str]
 
 
-type BarcodeBringConfigEntry = ConfigEntry[BarcodeBringData]
+BarcodeBringConfigEntry: TypeAlias = ConfigEntry[BarcodeBringData]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry) -> bool:
