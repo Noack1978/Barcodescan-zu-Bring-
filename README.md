@@ -1,12 +1,12 @@
-# 📦 Barcode → Bring! oder andere Einkaufsliste
+# 📦 Barcode → Bring! Einkaufsliste
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/Noack1978/Barcodescan-zu-Bring-.svg)](https://github.com/Noack1978/Barcodescan-zu-Bring-/releases)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io)
 
-Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** oder auch andere Einkaufsliste ein. **Keine manuelle YAML-Konfiguration nötig.**
+Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** ein. **Keine manuelle YAML-Konfiguration nötig.**
 
-> **v2.1.1** – Webhooks werden pro Benutzer eindeutig benannt
+> **v2.1.2** – Automatische Nabu Casa Cloud-Hook Registrierung
 
 ---
 
@@ -26,7 +26,6 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 - Home Assistant 2024.1 oder neuer
 - Android-App [Binary Eye](https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye)
 - Bring!-Integration installiert (liefert eine `todo.xxx`-Entity)
-- es geht auch jede andere Einkaufsliste
 - Home Assistant Companion App (für Push-Benachrichtigungen)
 
 ---
@@ -46,8 +45,9 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 1. **Einstellungen → Geräte & Dienste → + Integration hinzufügen**
 2. Nach „Barcode → Bring!" suchen
 3. **Schritt 1:** Benutzername eingeben, Bring!-Liste und Benachrichtigungsgeräte wählen
-4. **Schritt 2:** Webhook-Aktivierungsanleitung lesen → **Fertig**
-5. **Webhook aktivieren:** Einstellungen → Integrationen → Webhooks → Webhook `barcode_bring_xxxxxxxx` aktivieren → URL kopieren
+4. **Schritt 2:** Die Webhook-URL wird direkt angezeigt:
+   - **Ohne Nabu Casa:** lokale URL → in Binary Eye eintragen
+   - **Mit Nabu Casa:** lokale URL + Cloud-URL werden angezeigt, Cloud-Hook wird **automatisch** registriert → gewünschte URL in Binary Eye eintragen → **Fertig**
 
 Für **mehrere Benutzer** die Integration einfach erneut hinzufügen – jede Instanz erhält eine eigene Webhook-URL und eigene Benachrichtigungsgeräte.
 
@@ -97,6 +97,7 @@ In Binary Eye unter **Einstellungen → Aktion bei Scan**:
 | Aktionstyp   | HTTP-POST                                                   |
 | URL          | *(aus HA Webhooks kopieren – siehe Einrichtung Schritt 5)*  |
 | Content-Type | `application/json`                                          |
+| Body         | `{"content": "$barcode$"}`                                  |
 
 ---
 
@@ -128,6 +129,11 @@ Ersten gefundenen Produktnamen verwenden
 ---
 
 ## 📋 Changelog
+
+### v2.1.2
+- Webhook-URL wird direkt im Setup-Dialog angezeigt (lokal + Nabu Casa)
+- Nabu Casa Cloud-Hook wird automatisch registriert – kein manueller Aktivierungsschritt
+- Cloud-Hook wird beim Entfernen der Integration automatisch gelöscht
 
 ### v2.1.1
 - Webhook-Name enthält jetzt den Benutzernamen (z. B. "Barcode Scan (Mirko)")
