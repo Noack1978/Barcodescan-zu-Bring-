@@ -6,9 +6,10 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components import cloud
+from homeassistant.components.cloud import CloudNotAvailable, async_active_subscription
 from homeassistant.components.webhook import async_generate_url
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     SelectOptionDict,
     SelectSelector,
@@ -27,6 +28,10 @@ from .const import (
     CONF_WEBHOOK_ID,
     DOMAIN,
 )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Hilfsfunktionen
+# ──────────────────────────────────────────────────────────────────────────────
 
 def _get_todo_entities(hass: HomeAssistant) -> list[str]:
     """Alle vorhandenen todo-Entities ermitteln."""
@@ -51,11 +56,10 @@ def _build_schema(
     current_bring_list: str = "",
     current_notify_services: list[str] | None = None,
 ) -> vol.Schema:
-    """Schema mit HA-Selektoren bauen (korrekte UI-Darstellung)."""
+    """Schema mit HA-Selektoren bauen."""
     if current_notify_services is None:
         current_notify_services = []
 
-    # Bring!-Liste: Dropdown-Selektor wenn Entities vorhanden
     if todo_entities:
         bring_selector = SelectSelector(
             SelectSelectorConfig(
@@ -68,7 +72,6 @@ def _build_schema(
         bring_selector = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
         bring_default = current_bring_list or "todo.einkaufsliste"
 
-    # Notify-Dienste: Multi-Select-Selektor wenn Dienste vorhanden
     if notify_services:
         notify_selector = SelectSelector(
             SelectSelectorConfig(
@@ -77,7 +80,9 @@ def _build_schema(
                 mode=SelectSelectorMode.LIST,
             )
         )
-        notify_default = current_notify_services if current_notify_services else notify_services[:1]
+        notify_default = (
+            current_notify_services if current_notify_services else notify_services[:1]
+        )
     else:
         notify_selector = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
         notify_default = (
@@ -97,7 +102,7 @@ def _build_schema(
     )
 
 def _parse_notify(raw: Any) -> list[str]:
-    """Notify-Eingabe normalisieren (Liste oder kommagetrennte Zeichenkette)."""
+    """Notify-Eingabe normalisieren."""
     if isinstance(raw, str):
         return [s.strip() for s in raw.split(",") if s.strip()]
     return [s for s in list(raw) if s.strip()]
@@ -105,6 +110,41 @@ def _parse_notify(raw: Any) -> list[str]:
 def _validate_bring_list(hass: HomeAssistant, entity_id: str) -> bool:
     """Prüft ob die Todo-Entity existiert."""
     return hass.states.get(entity_id) is not None and entity_id.startswith("todo.")
+
+async def _get_webhook_urls(
+    hass: HomeAssistant, webhook_id: str, existing_cloudhook_url: str | None = None
+) -> tuple[str, str | None]:
+    """Lokale URL und ggf. Nabu-Casa-URL ermitteln.
+
+    existing_cloudhook_url: bereits gespeicherte Cloud-URL (aus entry.data).
+    Falls vorhanden, wird diese direkt zurückgegeben ohne API-Aufruf.
+    """
+    # Lokale URL – immer über async_generate_url
+    local_url = async_generate_url(hass, webhook_id)
+
+    # Cloud-URL: vorhandene nutzen oder neu anlegen
+    cloud_url: str | None = existing_cloudhook_url
+
+    if not cloud_url:
+        try:
+            if async_active_subscription(hass):
+                # async_get_or_create_cloudhook legt Hook an und aktiviert ihn
+                cloud_url = await cloud.async_get_or_create_cloudhook(hass, webhook_id)
+        except (CloudNotAvailable, AttributeError, Exception):
+            cloud_url = None
+
+    return local_url, cloud_url
+
+def _format_webhook_info(local_url: str, cloud_url: str | None) -> str:
+    """URL-Info für den Dialog formatieren."""
+    if cloud_url:
+        return (
+            "**Lokal (nur im Heimnetz):**\n"
+            f"`{local_url}`\n\n"
+            "**Nabu Casa (überall erreichbar):**\n"
+            f"`{cloud_url}`"
+        )
+    return f"`{local_url}`"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config Flow
@@ -117,9 +157,9 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._data: dict = {}
-        # Steuert ob Schritt 2 bereits angezeigt wurde.
-        # Nötig weil HA bei vol.Schema({}) user_input={} übergibt, nicht None.
-        self._webhook_shown = False
+        # Steuert ob der URL-Schritt bereits angezeigt wurde.
+        # Nötig weil HA bei vol.Schema({}) user_input={} statt None übergibt.
+        self._url_shown = False
 
     async def async_step_user(
         self, user_input: dict | None = None
@@ -134,7 +174,6 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 bring_list = bring_list.strip()
             notify_services = _parse_notify(user_input[CONF_NOTIFY_SERVICES])
 
-            # Unique ID pro Benutzer – verhindert Dopplungen
             await self.async_set_unique_id(f"{DOMAIN}_{user_name.lower()}")
             self._abort_if_unique_id_configured()
 
@@ -149,7 +188,7 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_NOTIFY_SERVICES: notify_services,
                     CONF_WEBHOOK_ID: f"barcode_bring_{secrets.token_hex(8)}",
                 }
-                return await self.async_step_webhook()
+                return await self.async_step_url()
 
         return self.async_show_form(
             step_id="user",
@@ -160,52 +199,36 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_webhook(
+    async def async_step_url(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Fertige Webhook-URL(s) anzeigen."""
-        if self._webhook_shown:
+        """Schritt 2: Cloud-Hook anlegen, URL anzeigen, Entry erstellen.
+
+        Der Cloud-Hook wird hier – VOR async_create_entry – angelegt, damit
+        die echte hooks.nabu.casa-URL direkt angezeigt werden kann.
+        """
+        if self._url_shown:
+            # Nutzer hat bestätigt → Entry anlegen
             user_name: str = self._data[CONF_USER_NAME]
             return self.async_create_entry(
                 title=f"Barcode → Bring! ({user_name})",
                 data=self._data,
             )
 
-        self._webhook_shown = True
+        self._url_shown = True
         webhook_id: str = self._data[CONF_WEBHOOK_ID]
 
-        # Lokale URL – immer verfügbar
-        local_url = async_generate_url(self.hass, webhook_id)
+        local_url, cloud_url = await _get_webhook_urls(self.hass, webhook_id)
 
-        # Nabu Casa Cloud-URL:
-        # async_create_cloudhook läuft in async_setup_entry – hier nur anzeigen
-        cloud_url: str | None = None
-        try:
-            external = get_url(
-                self.hass,
-                allow_internal=False,
-                allow_ip=False,
-                prefer_cloud=True,
-            )
-            cloud_url = f"{external}/api/webhook/{webhook_id}"
-        except NoURLAvailableError:
-            pass
-
+        # Cloud-URL in _data speichern → landet in entry.data
         if cloud_url:
-            webhook_info = (
-                "**Lokal (nur im Heimnetz):**\n"
-                f"`{local_url}`\n\n"
-                "**Nabu Casa (überall erreichbar, wird automatisch aktiviert):**\n"
-                f"`{cloud_url}`"
-            )
-        else:
-            webhook_info = f"`{local_url}`"
+            self._data[CONF_CLOUDHOOK_URL] = cloud_url
 
         return self.async_show_form(
-            step_id="webhook",
+            step_id="url",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "webhook_url": webhook_info,
+                "webhook_url": _format_webhook_info(local_url, cloud_url),
             },
         )
 
@@ -221,17 +244,21 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 # Options Flow
 # Regeln:
 #   - Kein __init__, kein self.config_entry = ... (AttributeError seit HA 2025.12)
-#   - OptionsFlowWithReload: automatischer Reload nach Änderung, kein update_listener nötig
+#   - OptionsFlowWithReload: automatischer Reload nach Änderung
 #   - self.config_entry ist read-only Property – nur lesend verwenden
 # ──────────────────────────────────────────────────────────────────────────────
 
 class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
-    """Options Flow – bestehende Konfiguration ändern."""
+    """Options Flow – bestehende Konfiguration ändern.
+
+    Kein __init__ – würde AttributeError seit HA 2025.12 verursachen.
+    Instanzvariablen werden lazy über getattr initialisiert.
+    """
 
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Einstellungen anzeigen und speichern."""
+        """Schritt 1: Einstellungen anzeigen und speichern."""
         errors: dict[str, str] = {}
 
         current_user_name: str = self.config_entry.data.get(CONF_USER_NAME, "")
@@ -239,9 +266,6 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
         current_notify = self.config_entry.data.get(CONF_NOTIFY_SERVICES, [])
         if isinstance(current_notify, str):
             current_notify = [current_notify]
-
-        todo_entities = _get_todo_entities(self.hass)
-        notify_services = _get_notify_services(self.hass)
 
         if user_input is not None:
             new_user_name = user_input[CONF_USER_NAME].strip()
@@ -255,26 +279,51 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
             elif not new_notify:
                 errors[CONF_NOTIFY_SERVICES] = "invalid_notify"
             else:
-                new_data = dict(self.config_entry.data)
-                new_data[CONF_USER_NAME] = new_user_name
-                new_data[CONF_BRING_LIST] = new_bring_list
-                new_data[CONF_NOTIFY_SERVICES] = new_notify
-
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    title=f"Barcode → Bring! ({new_user_name})",
-                    data=new_data,
-                )
-                return self.async_create_entry(title="", data={})
+                # Neue Daten merken, dann URL anzeigen
+                self._new_data: dict = dict(self.config_entry.data)
+                self._new_data[CONF_USER_NAME] = new_user_name
+                self._new_data[CONF_BRING_LIST] = new_bring_list
+                self._new_data[CONF_NOTIFY_SERVICES] = new_notify
+                return await self.async_step_url()
 
         return self.async_show_form(
             step_id="init",
             data_schema=_build_schema(
-                todo_entities,
-                notify_services,
+                _get_todo_entities(self.hass),
+                _get_notify_services(self.hass),
                 current_user_name=current_user_name,
                 current_bring_list=current_bring_list,
                 current_notify_services=list(current_notify),
             ),
             errors=errors,
+        )
+
+    async def async_step_url(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Schritt 2: Webhook-URL anzeigen, dann speichern."""
+        if getattr(self, "_url_shown", False):
+            # Nutzer hat bestätigt → speichern
+            new_user_name: str = self._new_data[CONF_USER_NAME]
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                title=f"Barcode → Bring! ({new_user_name})",
+                data=self._new_data,
+            )
+            return self.async_create_entry(title="", data={})
+
+        self._url_shown = True  # type: ignore[assignment]
+        webhook_id: str = self.config_entry.data[CONF_WEBHOOK_ID]
+        existing_cloud_url: str | None = self.config_entry.data.get(CONF_CLOUDHOOK_URL)
+
+        local_url, cloud_url = await _get_webhook_urls(
+            self.hass, webhook_id, existing_cloudhook_url=existing_cloud_url
+        )
+
+        return self.async_show_form(
+            step_id="url",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "webhook_url": _format_webhook_info(local_url, cloud_url),
+            },
         )

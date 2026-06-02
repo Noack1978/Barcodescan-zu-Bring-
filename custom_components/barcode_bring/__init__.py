@@ -77,9 +77,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         local_only=False,
     )
 
-    # Nabu Casa Cloud-Hook registrieren falls aktives Abo vorhanden
-    # und noch keine Cloud-URL gespeichert ist
-    # try/except um AttributeError abzufangen falls cloud-Modul noch nicht initialisiert
+    # Nabu Casa Cloud-Hook: beim Neustart sicherstellen dass er existiert
+    # Beim ersten Setup wird er bereits im Config-Flow angelegt (async_step_url)
     try:
         cloud_active = async_active_subscription(hass)
     except AttributeError:
@@ -87,20 +86,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
 
     if cloud_active and CONF_CLOUDHOOK_URL not in entry.data:
         try:
-            cloudhook_url = await cloud.async_create_cloudhook(hass, webhook_id)
+            # async_get_or_create_cloudhook: legt Hook an falls nicht vorhanden
+            # und aktiviert ihn direkt
+            cloudhook_url = await cloud.async_get_or_create_cloudhook(
+                hass, webhook_id
+            )
             new_data = dict(entry.data)
             new_data[CONF_CLOUDHOOK_URL] = cloudhook_url
             hass.config_entries.async_update_entry(entry, data=new_data)
             _LOGGER.info(
-                "Barcode → Bring! (%s): Cloud-Hook registriert: %s",
+                "Barcode → Bring! (%s): Cloud-Hook gesichert: %s",
                 user_name,
                 cloudhook_url,
             )
-        except CloudNotAvailable:
+        except (CloudNotAvailable, AttributeError):
             _LOGGER.debug("Barcode → Bring! (%s): Cloud nicht verfügbar", user_name)
-        except ValueError:
-            # Hook ist bei Nabu Casa bereits registriert aber URL fehlt in entry.data
-            _LOGGER.debug("Barcode → Bring! (%s): Cloud-Hook bereits registriert", user_name)
         except Exception as err:
             _LOGGER.warning("Barcode → Bring! (%s): Cloud-Hook Fehler: %s", user_name, err)
 
