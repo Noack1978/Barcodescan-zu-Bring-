@@ -157,9 +157,6 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._data: dict = {}
-        # Steuert ob der URL-Schritt bereits angezeigt wurde.
-        # Nötig weil HA bei vol.Schema({}) user_input={} statt None übergibt.
-        self._url_shown = False
 
     async def async_step_user(
         self, user_input: dict | None = None
@@ -204,10 +201,12 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Schritt 2: Cloud-Hook anlegen, URL anzeigen, Entry erstellen.
 
-        Der Cloud-Hook wird hier – VOR async_create_entry – angelegt, damit
-        die echte hooks.nabu.casa-URL direkt angezeigt werden kann.
+        user_input=None  → erster Aufruf, Formular anzeigen
+        user_input={}    → Nutzer hat bestätigt, Entry anlegen
+
+        Wichtig: kein internes Flag nötig – HA unterscheidet über user_input.
         """
-        if self._url_shown:
+        if user_input is not None:
             # Nutzer hat bestätigt → Entry anlegen
             user_name: str = self._data[CONF_USER_NAME]
             return self.async_create_entry(
@@ -215,7 +214,7 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data=self._data,
             )
 
-        self._url_shown = True
+        # Erster Aufruf: Cloud-Hook anlegen und URL anzeigen
         webhook_id: str = self._data[CONF_WEBHOOK_ID]
 
         local_url, cloud_url = await _get_webhook_urls(self.hass, webhook_id)
@@ -301,8 +300,12 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_url(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Webhook-URL anzeigen, dann speichern."""
-        if getattr(self, "_url_shown", False):
+        """Schritt 2: Webhook-URL anzeigen, dann speichern.
+
+        user_input=None → Formular anzeigen
+        user_input={}   → Nutzer hat bestätigt, speichern
+        """
+        if user_input is not None:
             # Nutzer hat bestätigt → speichern
             new_user_name: str = self._new_data[CONF_USER_NAME]
             self.hass.config_entries.async_update_entry(
@@ -312,7 +315,7 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
             )
             return self.async_create_entry(title="", data={})
 
-        self._url_shown = True  # type: ignore[assignment]
+        # Erster Aufruf: URL anzeigen
         webhook_id: str = self.config_entry.data[CONF_WEBHOOK_ID]
         existing_cloud_url: str | None = self.config_entry.data.get(CONF_CLOUDHOOK_URL)
 
