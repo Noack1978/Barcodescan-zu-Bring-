@@ -89,14 +89,10 @@ Die Webhook-URL bleibt dabei unverändert – Binary Eye muss nicht neu eingeric
 
 ## 📱 Binary Eye einrichten (einmalig manuell)
 
-In Binary Eye unter **Einstellungen → Aktion bei Scan**:
+In Binary Eye unter **Einstellungen → Weiterleitung**:
 
-| Einstellung  | Wert                                                        |
-|--------------|-------------------------------------------------------------|
-| Aktionstyp   | HTTP-POST                                                   |
-| URL          | *(aus Setup-Dialog kopieren, oder unter HA Cloud → Webhooks)*|
-| Content-Type | `application/json`                                          |
-| Body         | `{"content": "$barcode$"}`                                  |
+1. **Scans weiterleiten** aktivieren
+2. **URL** eintragen *(aus Setup-Dialog kopieren, oder unter HA Cloud → Webhooks)*
 
 ---
 
