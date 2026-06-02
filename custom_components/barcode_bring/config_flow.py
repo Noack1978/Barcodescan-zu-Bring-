@@ -1,4 +1,4 @@
-"""Config Flow und Options Flow für Barcode → Bring! Integration."""
+"""Config Flow und Options Flow fuer Barcode to Bring! Integration."""
 from __future__ import annotations
 
 import secrets
@@ -27,24 +27,17 @@ from .const import (
     DOMAIN,
 )
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Hilfsfunktionen
-# ──────────────────────────────────────────────────────────────────────────────
-
 def _get_todo_entities(hass: HomeAssistant) -> list[str]:
-    """Alle vorhandenen todo-Entities ermitteln."""
     return sorted(
-        state.entity_id
-        for state in hass.states.async_all()
-        if state.entity_id.startswith("todo.")
+        s.entity_id for s in hass.states.async_all()
+        if s.entity_id.startswith("todo.")
     )
 
 def _get_notify_services(hass: HomeAssistant) -> list[str]:
-    """Alle vorhandenen notify-Dienste ermitteln."""
     return sorted(
-        f"notify.{name}"
-        for name in (hass.services.async_services().get("notify") or {})
-        if name not in ("send_message", "notify", "persistent_notification")
+        f"notify.{n}"
+        for n in (hass.services.async_services().get("notify") or {})
+        if n not in ("send_message", "notify", "persistent_notification")
     )
 
 def _build_schema(
@@ -54,81 +47,81 @@ def _build_schema(
     current_bring_list: str = "",
     current_notify_services: list[str] | None = None,
 ) -> vol.Schema:
-    """Schema mit HA-Selektoren bauen."""
     if current_notify_services is None:
         current_notify_services = []
 
     if todo_entities:
-        bring_selector = SelectSelector(
-            SelectSelectorConfig(
-                options=[SelectOptionDict(value=e, label=e) for e in todo_entities],
-                mode=SelectSelectorMode.DROPDOWN,
-            )
-        )
+        bring_sel = SelectSelector(SelectSelectorConfig(
+            options=[SelectOptionDict(value=e, label=e) for e in todo_entities],
+            mode=SelectSelectorMode.DROPDOWN,
+        ))
         bring_default = current_bring_list or todo_entities[0]
     else:
-        bring_selector = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+        bring_sel = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
         bring_default = current_bring_list or "todo.einkaufsliste"
 
     if notify_services:
-        notify_selector = SelectSelector(
-            SelectSelectorConfig(
-                options=[SelectOptionDict(value=s, label=s) for s in notify_services],
-                multiple=True,
-                mode=SelectSelectorMode.LIST,
-            )
-        )
-        notify_default = (
-            current_notify_services if current_notify_services else notify_services[:1]
-        )
+        notify_sel = SelectSelector(SelectSelectorConfig(
+            options=[SelectOptionDict(value=s, label=s) for s in notify_services],
+            multiple=True,
+            mode=SelectSelectorMode.LIST,
+        ))
+        notify_default = current_notify_services if current_notify_services else notify_services[:1]
     else:
-        notify_selector = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+        notify_sel = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
         notify_default = (
-            ", ".join(current_notify_services)
-            if current_notify_services
+            ", ".join(current_notify_services) if current_notify_services
             else "notify.mobile_app_mein_handy"
         )
 
-    return vol.Schema(
-        {
-            vol.Required(CONF_USER_NAME, default=current_user_name): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.TEXT)
-            ),
-            vol.Required(CONF_BRING_LIST, default=bring_default): bring_selector,
-            vol.Required(CONF_NOTIFY_SERVICES, default=notify_default): notify_selector,
-        }
-    )
+    return vol.Schema({
+        vol.Required(CONF_USER_NAME, default=current_user_name): TextSelector(
+            TextSelectorConfig(type=TextSelectorType.TEXT)
+        ),
+        vol.Required(CONF_BRING_LIST, default=bring_default): bring_sel,
+        vol.Required(CONF_NOTIFY_SERVICES, default=notify_default): notify_sel,
+    })
 
 def _parse_notify(raw: Any) -> list[str]:
-    """Notify-Eingabe normalisieren."""
     if isinstance(raw, str):
         return [s.strip() for s in raw.split(",") if s.strip()]
     return [s for s in list(raw) if s.strip()]
 
 def _validate_bring_list(hass: HomeAssistant, entity_id: str) -> bool:
-    """Prüft ob die Todo-Entity existiert."""
     return hass.states.get(entity_id) is not None and entity_id.startswith("todo.")
 
-def _build_url_info(local_url: str, has_nabu_casa: bool) -> str:
-    """URL-Info-Text für den Dialog bauen.
+def _has_nabu_casa(hass: HomeAssistant) -> bool:
+    try:
+        from homeassistant.components.cloud import async_active_subscription
+        return bool(async_active_subscription(hass))
+    except Exception:
+        return False
 
-    Die Nabu-Casa-URL ist erst nach async_setup_entry bekannt.
-    Wir zeigen die lokale URL und einen Hinweis falls Nabu Casa aktiv ist.
+def _url_placeholders(local_url: str, nabu_casa: bool, cloud_url: str | None = None) -> dict:
+    """Placeholders fuer den url-Schritt bauen.
+
+    Kein leerer String fuer nabu_hint – das kann das Rendering in HA stoeren.
+    Stattdessen einen festen Text oder den cloud_url-Text.
     """
-    if has_nabu_casa:
-        return (
-            f"Lokale URL (Heimnetz): {local_url}\n\n"
-            "Nabu Casa URL: wird nach Abschluss unter "
-            "Einstellungen → Home Assistant Cloud → Webhooks angezeigt."
+    if nabu_casa or cloud_url:
+        hint = (
+            f"Nabu Casa URL: {cloud_url}" if cloud_url
+            else "Nabu Casa: Einstellungen > Home Assistant Cloud > Webhooks > aktivieren > URL kopieren."
         )
-    return f"Lokale URL: {local_url}"
+    else:
+        hint = "Nur lokales Netzwerk. Fuer externen Zugriff Nabu Casa oder DuckDNS nutzen."
+
+    return {
+        "local_url": local_url,
+        "nabu_hint": hint,
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config Flow
 # ──────────────────────────────────────────────────────────────────────────────
 
 class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config Flow für Barcode → Bring!."""
+    """Config Flow fuer Barcode to Bring!."""
 
     VERSION = 1
 
@@ -138,7 +131,6 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 1: Benutzername, Bring!-Liste und Notify-Dienste abfragen."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -176,39 +168,24 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_url(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Webhook-URL anzeigen.
-
-        user_input=None → Formular anzeigen
-        user_input={}   → Entry anlegen
-        """
+        """Schritt 2: URL anzeigen. user_input=None zeigt Formular, user_input={} legt Entry an."""
         if user_input is not None:
             user_name: str = self._data[CONF_USER_NAME]
             return self.async_create_entry(
-                title=f"Barcode → Bring! ({user_name})",
+                title=f"Barcode to Bring! ({user_name})",
                 data=self._data,
             )
 
         webhook_id: str = self._data[CONF_WEBHOOK_ID]
         local_url = async_generate_url(self.hass, webhook_id)
 
-        # Nabu Casa aktiv?
-        has_nabu_casa = False
-        try:
-            from homeassistant.components.cloud import async_active_subscription
-            has_nabu_casa = async_active_subscription(self.hass)
-        except Exception:
-            pass
-
         return self.async_show_form(
             step_id="url",
             data_schema=vol.Schema({}),
-            description_placeholders={
-                "local_url": local_url,
-                "nabu_hint": (
-                    "Nabu Casa URL: Einstellungen → Home Assistant Cloud → Webhooks → Webhook aktivieren → URL kopieren.\n\n"
-                    if has_nabu_casa else ""
-                ),
-            },
+            description_placeholders=_url_placeholders(
+                local_url=local_url,
+                nabu_casa=_has_nabu_casa(self.hass),
+            ),
         )
 
     @staticmethod
@@ -216,24 +193,22 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
-        """Options Flow bereitstellen."""
         return BarcodeBringOptionsFlow()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Options Flow
-# Regeln:
-#   - Kein __init__ (AttributeError seit HA 2025.12)
-#   - OptionsFlowWithReload: automatischer Reload nach Änderung
-#   - self.config_entry ist read-only Property – nur lesend verwenden
+# - Kein __init__ (AttributeError seit HA 2025.12)
+# - OptionsFlowWithReload: automatischer Reload nach Aenderung
+# - self.config_entry ist read-only
 # ──────────────────────────────────────────────────────────────────────────────
 
 class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
-    """Options Flow – bestehende Konfiguration ändern."""
+    """Options Flow – Konfiguration aendern."""
 
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 1: Einstellungen anzeigen und speichern."""
+        """Schritt 1: Einstellungen aendern, dann URL anzeigen."""
         errors: dict[str, str] = {}
 
         current_user_name: str = self.config_entry.data.get(CONF_USER_NAME, "")
@@ -254,16 +229,18 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
             elif not new_notify:
                 errors[CONF_NOTIFY_SERVICES] = "invalid_notify"
             else:
+                # Zuerst speichern, dann URL anzeigen
                 new_data = dict(self.config_entry.data)
                 new_data[CONF_USER_NAME] = new_user_name
                 new_data[CONF_BRING_LIST] = new_bring_list
                 new_data[CONF_NOTIFY_SERVICES] = new_notify
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
-                    title=f"Barcode → Bring! ({new_user_name})",
+                    title=f"Barcode to Bring! ({new_user_name})",
                     data=new_data,
                 )
-                return self.async_create_entry(title="", data={})
+                # Weiter zum URL-Schritt
+                return await self.async_step_url()
 
         return self.async_show_form(
             step_id="init",
@@ -280,7 +257,7 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_url(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Webhook-URL anzeigen (aus Konfigurieren heraus aufrufbar)."""
+        """Schritt 2: Webhook-URL anzeigen."""
         if user_input is not None:
             return self.async_create_entry(title="", data={})
 
@@ -288,16 +265,12 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
         local_url = async_generate_url(self.hass, webhook_id)
         cloud_url: str | None = self.config_entry.data.get(CONF_CLOUDHOOK_URL)
 
-        has_nabu_casa = bool(cloud_url)
-
         return self.async_show_form(
             step_id="url",
             data_schema=vol.Schema({}),
-            description_placeholders={
-                "local_url": local_url,
-                "nabu_hint": (
-                    f"Nabu Casa URL: {cloud_url}"
-                    if has_nabu_casa else ""
-                ),
-            },
+            description_placeholders=_url_placeholders(
+                local_url=local_url,
+                nabu_casa=_has_nabu_casa(self.hass),
+                cloud_url=cloud_url,
+            ),
         )
