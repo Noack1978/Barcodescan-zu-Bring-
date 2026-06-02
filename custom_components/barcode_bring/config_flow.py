@@ -6,8 +6,6 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.components import cloud
-from homeassistant.components.cloud import CloudNotAvailable, async_active_subscription
 from homeassistant.components.webhook import async_generate_url
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
@@ -111,40 +109,19 @@ def _validate_bring_list(hass: HomeAssistant, entity_id: str) -> bool:
     """Prüft ob die Todo-Entity existiert."""
     return hass.states.get(entity_id) is not None and entity_id.startswith("todo.")
 
-async def _get_webhook_urls(
-    hass: HomeAssistant, webhook_id: str, existing_cloudhook_url: str | None = None
-) -> tuple[str, str | None]:
-    """Lokale URL und ggf. Nabu-Casa-URL ermitteln.
+def _build_url_info(local_url: str, has_nabu_casa: bool) -> str:
+    """URL-Info-Text für den Dialog bauen.
 
-    existing_cloudhook_url: bereits gespeicherte Cloud-URL (aus entry.data).
-    Falls vorhanden, wird diese direkt zurückgegeben ohne API-Aufruf.
+    Die Nabu-Casa-URL ist erst nach async_setup_entry bekannt.
+    Wir zeigen die lokale URL und einen Hinweis falls Nabu Casa aktiv ist.
     """
-    # Lokale URL – immer über async_generate_url
-    local_url = async_generate_url(hass, webhook_id)
-
-    # Cloud-URL: vorhandene nutzen oder neu anlegen
-    cloud_url: str | None = existing_cloudhook_url
-
-    if not cloud_url:
-        try:
-            if async_active_subscription(hass):
-                # async_get_or_create_cloudhook legt Hook an und aktiviert ihn
-                cloud_url = await cloud.async_get_or_create_cloudhook(hass, webhook_id)
-        except (CloudNotAvailable, AttributeError, Exception):
-            cloud_url = None
-
-    return local_url, cloud_url
-
-def _format_webhook_info(local_url: str, cloud_url: str | None) -> str:
-    """URL-Info für den Dialog formatieren."""
-    if cloud_url:
+    if has_nabu_casa:
         return (
-            "**Lokal (nur im Heimnetz):**\n"
-            f"`{local_url}`\n\n"
-            "**Nabu Casa (überall erreichbar):**\n"
-            f"`{cloud_url}`"
+            f"Lokale URL (Heimnetz): {local_url}\n\n"
+            "Nabu Casa URL: wird nach Abschluss unter "
+            "Einstellungen → Home Assistant Cloud → Webhooks angezeigt."
         )
-    return f"`{local_url}`"
+    return f"Lokale URL: {local_url}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config Flow
@@ -199,35 +176,38 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_url(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Cloud-Hook anlegen, URL anzeigen, Entry erstellen.
+        """Schritt 2: Webhook-URL anzeigen.
 
-        user_input=None  → erster Aufruf, Formular anzeigen
-        user_input={}    → Nutzer hat bestätigt, Entry anlegen
-
-        Wichtig: kein internes Flag nötig – HA unterscheidet über user_input.
+        user_input=None → Formular anzeigen
+        user_input={}   → Entry anlegen
         """
         if user_input is not None:
-            # Nutzer hat bestätigt → Entry anlegen
             user_name: str = self._data[CONF_USER_NAME]
             return self.async_create_entry(
                 title=f"Barcode → Bring! ({user_name})",
                 data=self._data,
             )
 
-        # Erster Aufruf: Cloud-Hook anlegen und URL anzeigen
         webhook_id: str = self._data[CONF_WEBHOOK_ID]
+        local_url = async_generate_url(self.hass, webhook_id)
 
-        local_url, cloud_url = await _get_webhook_urls(self.hass, webhook_id)
-
-        # Cloud-URL in _data speichern → landet in entry.data
-        if cloud_url:
-            self._data[CONF_CLOUDHOOK_URL] = cloud_url
+        # Nabu Casa aktiv?
+        has_nabu_casa = False
+        try:
+            from homeassistant.components.cloud import async_active_subscription
+            has_nabu_casa = async_active_subscription(self.hass)
+        except Exception:
+            pass
 
         return self.async_show_form(
             step_id="url",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "webhook_url": _format_webhook_info(local_url, cloud_url),
+                "local_url": local_url,
+                "nabu_hint": (
+                    "Nabu Casa URL: Einstellungen → Home Assistant Cloud → Webhooks → Webhook aktivieren → URL kopieren.\n\n"
+                    if has_nabu_casa else ""
+                ),
             },
         )
 
@@ -242,17 +222,13 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 # ──────────────────────────────────────────────────────────────────────────────
 # Options Flow
 # Regeln:
-#   - Kein __init__, kein self.config_entry = ... (AttributeError seit HA 2025.12)
+#   - Kein __init__ (AttributeError seit HA 2025.12)
 #   - OptionsFlowWithReload: automatischer Reload nach Änderung
 #   - self.config_entry ist read-only Property – nur lesend verwenden
 # ──────────────────────────────────────────────────────────────────────────────
 
 class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
-    """Options Flow – bestehende Konfiguration ändern.
-
-    Kein __init__ – würde AttributeError seit HA 2025.12 verursachen.
-    Instanzvariablen werden lazy über getattr initialisiert.
-    """
+    """Options Flow – bestehende Konfiguration ändern."""
 
     async def async_step_init(
         self, user_input: dict | None = None
@@ -278,12 +254,16 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
             elif not new_notify:
                 errors[CONF_NOTIFY_SERVICES] = "invalid_notify"
             else:
-                # Neue Daten merken, dann URL anzeigen
-                self._new_data: dict = dict(self.config_entry.data)
-                self._new_data[CONF_USER_NAME] = new_user_name
-                self._new_data[CONF_BRING_LIST] = new_bring_list
-                self._new_data[CONF_NOTIFY_SERVICES] = new_notify
-                return await self.async_step_url()
+                new_data = dict(self.config_entry.data)
+                new_data[CONF_USER_NAME] = new_user_name
+                new_data[CONF_BRING_LIST] = new_bring_list
+                new_data[CONF_NOTIFY_SERVICES] = new_notify
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    title=f"Barcode → Bring! ({new_user_name})",
+                    data=new_data,
+                )
+                return self.async_create_entry(title="", data={})
 
         return self.async_show_form(
             step_id="init",
@@ -300,33 +280,24 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_url(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Webhook-URL anzeigen, dann speichern.
-
-        user_input=None → Formular anzeigen
-        user_input={}   → Nutzer hat bestätigt, speichern
-        """
+        """Webhook-URL anzeigen (aus Konfigurieren heraus aufrufbar)."""
         if user_input is not None:
-            # Nutzer hat bestätigt → speichern
-            new_user_name: str = self._new_data[CONF_USER_NAME]
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                title=f"Barcode → Bring! ({new_user_name})",
-                data=self._new_data,
-            )
             return self.async_create_entry(title="", data={})
 
-        # Erster Aufruf: URL anzeigen
         webhook_id: str = self.config_entry.data[CONF_WEBHOOK_ID]
-        existing_cloud_url: str | None = self.config_entry.data.get(CONF_CLOUDHOOK_URL)
+        local_url = async_generate_url(self.hass, webhook_id)
+        cloud_url: str | None = self.config_entry.data.get(CONF_CLOUDHOOK_URL)
 
-        local_url, cloud_url = await _get_webhook_urls(
-            self.hass, webhook_id, existing_cloudhook_url=existing_cloud_url
-        )
+        has_nabu_casa = bool(cloud_url)
 
         return self.async_show_form(
             step_id="url",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "webhook_url": _format_webhook_info(local_url, cloud_url),
+                "local_url": local_url,
+                "nabu_hint": (
+                    f"Nabu Casa URL: {cloud_url}"
+                    if has_nabu_casa else ""
+                ),
             },
         )

@@ -2,47 +2,47 @@
   "config": {
     "step": {
       "user": {
-        "title": "Barcode → Bring! einrichten",
-        "description": "Richte die Integration für einen Benutzer ein. Für mehrere Benutzer kann die Integration mehrfach hinzugefügt werden.",
+        "title": "Barcode to Bring! einrichten",
+        "description": "Richte die Integration fuer einen Benutzer ein. Fuer mehrere Benutzer kann die Integration mehrfach hinzugefuegt werden.",
         "data": {
           "user_name": "Name (z. B. Mirko)",
           "bring_list": "Bring!-Liste",
-          "notify_services": "Benachrichtigungsgeräte (mehrere wählbar)"
+          "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)"
         }
       },
       "url": {
         "title": "Webhook-URL für Binary Eye",
-        "description": "Trage diese URL in Binary Eye ein:\n\n{webhook_url}\n\n**Einstellungen in Binary Eye:**\n- Aktionstyp: HTTP-POST\n- Content-Type: `application/json`\n- Body: `{\"content\": \"$barcode$\"}`\n\nKlicke auf **Fertig** sobald du Binary Eye eingerichtet hast."
+        "description": "Dein Webhook wurde angelegt. Trage die URL in Binary Eye ein.\n\nLokale URL (nur im Heimnetz):\n{local_url}\n\n{nabu_hint}Einstellungen in Binary Eye:\n- Aktionstyp: HTTP-POST\n- Content-Type: application/json\n- Body: content=$barcode$\n\nKlicke auf Fertig sobald du Binary Eye eingerichtet hast."
       }
     },
     "error": {
-      "invalid_bring_list": "Die angegebene Liste wurde nicht gefunden. Prüfe die Entity-ID (muss mit 'todo.' beginnen).",
-      "invalid_notify": "Mindestens ein Benachrichtigungsgerät muss ausgewählt werden.",
+      "invalid_bring_list": "Die angegebene Liste wurde nicht gefunden.",
+      "invalid_notify": "Mindestens ein Benachrichtigungsgeraet muss ausgewaehlt werden.",
       "unknown": "Unbekannter Fehler."
     },
     "abort": {
-      "already_configured": "Für diesen Benutzer ist Barcode → Bring! bereits eingerichtet."
+      "already_configured": "Fuer diesen Benutzer ist Barcode to Bring! bereits eingerichtet."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Barcode → Bring! konfigurieren",
-        "description": "Hier kannst du Benutzername, Bring!-Liste und Benachrichtigungsgeräte ändern. Die Webhook-URL bleibt unverändert.",
+        "title": "Barcode to Bring! konfigurieren",
+        "description": "Benutzername, Liste und Benachrichtigungsgeraete aendern.",
         "data": {
           "user_name": "Name",
           "bring_list": "Bring!-Liste",
-          "notify_services": "Benachrichtigungsgeräte (mehrere wählbar)"
+          "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)"
         }
       },
       "url": {
-        "title": "Webhook-URL für Binary Eye",
-        "description": "Trage diese URL in Binary Eye ein:\n\n{webhook_url}\n\n**Einstellungen in Binary Eye:**\n- Aktionstyp: HTTP-POST\n- Content-Type: `application/json`\n- Body: `{\"content\": \"$barcode$\"}`\n\nKlicke auf **Fertig** sobald du Binary Eye eingerichtet hast."
+        "title": "Webhook-URL",
+        "description": "Lokale URL (nur im Heimnetz):\n{local_url}\n\n{nabu_hint}"
       }
     },
     "error": {
       "invalid_bring_list": "Die angegebene Liste wurde nicht gefunden.",
-      "invalid_notify": "Mindestens ein Benachrichtigungsgerät muss ausgewählt werden."
+      "invalid_notify": "Mindestens ein Benachrichtigungsgeraet muss ausgewaehlt werden."
     }
   }
 }
