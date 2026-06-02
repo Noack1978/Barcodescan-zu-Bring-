@@ -88,6 +88,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
             )
         except CloudNotAvailable:
             _LOGGER.debug("Barcode → Bring! (%s): Cloud nicht verfügbar", user_name)
+        except ValueError:
+            # Hook ist bei Nabu Casa bereits registriert aber URL fehlt in entry.data
+            # Tritt auf wenn HA neu startet ohne dass die URL gespeichert wurde
+            _LOGGER.debug("Barcode → Bring! (%s): Cloud-Hook bereits registriert", user_name)
 
     _LOGGER.info("Barcode → Bring! (%s): Webhook '%s' registriert", user_name, webhook_id)
 
