@@ -10,7 +10,10 @@ from typing import TypeAlias
 
 import aiohttp
 from homeassistant.components import cloud
-from homeassistant.components.cloud import CloudNotAvailable
+from homeassistant.components.cloud import (
+    CloudNotAvailable,
+    async_active_subscription,
+)
 from homeassistant.components.webhook import (
     async_register as webhook_register,
     async_unregister as webhook_unregister,
@@ -46,11 +49,14 @@ BarcodeBringConfigEntry: TypeAlias = ConfigEntry[BarcodeBringData]
 async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry) -> bool:
     """Integration einrichten."""
     webhook_id: str = entry.data[CONF_WEBHOOK_ID]
+    user_name: str = entry.data.get(CONF_USER_NAME, "Unbekannt")
 
     queue: asyncio.Queue[str] = asyncio.Queue()
     queued_barcodes: set[str] = set()
 
-    worker_task = hass.async_create_task(
+    # Background Task – nicht als tracked task registrieren, da er ewig läuft
+    # async_create_task() würde den HA-Bootstrap blockieren
+    worker_task = hass.async_create_background_task(
         _barcode_worker(hass, entry, queue, queued_barcodes),
         name=f"barcode_bring_worker_{webhook_id}",
     )
@@ -60,8 +66,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         worker=worker_task,
         queued_barcodes=queued_barcodes,
     )
-
-    user_name: str = entry.data.get(CONF_USER_NAME, "Unbekannt")
 
     webhook_register(
         hass,
@@ -73,9 +77,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         local_only=False,
     )
 
-    # Nabu Casa Cloud-Hook registrieren falls Abo aktiv
-    # Nur wenn noch keine Cloud-URL gespeichert ist
-    if cloud.async_is_logged_in(hass) and CONF_CLOUDHOOK_URL not in entry.data:
+    # Nabu Casa Cloud-Hook registrieren falls aktives Abo vorhanden
+    # und noch keine Cloud-URL gespeichert ist
+    # try/except um AttributeError abzufangen falls cloud-Modul noch nicht initialisiert
+    try:
+        cloud_active = async_active_subscription(hass)
+    except AttributeError:
+        cloud_active = False
+
+    if cloud_active and CONF_CLOUDHOOK_URL not in entry.data:
         try:
             cloudhook_url = await cloud.async_create_cloudhook(hass, webhook_id)
             new_data = dict(entry.data)
@@ -90,8 +100,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
             _LOGGER.debug("Barcode → Bring! (%s): Cloud nicht verfügbar", user_name)
         except ValueError:
             # Hook ist bei Nabu Casa bereits registriert aber URL fehlt in entry.data
-            # Tritt auf wenn HA neu startet ohne dass die URL gespeichert wurde
             _LOGGER.debug("Barcode → Bring! (%s): Cloud-Hook bereits registriert", user_name)
+        except Exception as err:
+            _LOGGER.warning("Barcode → Bring! (%s): Cloud-Hook Fehler: %s", user_name, err)
 
     _LOGGER.info("Barcode → Bring! (%s): Webhook '%s' registriert", user_name, webhook_id)
 
@@ -106,7 +117,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry
             pass
 
 async def async_unload_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry) -> bool:
-    """Integration entfernen."""
+    """Integration entladen."""
     webhook_unregister(hass, entry.data[CONF_WEBHOOK_ID])
 
     data: BarcodeBringData = entry.runtime_data
@@ -139,6 +150,7 @@ async def _handle_webhook(
         _LOGGER.warning("Barcode → Bring!: Leerer Barcode empfangen")
         return
 
+    # Entry über webhook_id ermitteln
     entry: BarcodeBringConfigEntry | None = next(
         (
             e
@@ -147,11 +159,16 @@ async def _handle_webhook(
         ),
         None,
     )
-    if entry is None or not hasattr(entry, "runtime_data"):
-        _LOGGER.error("Barcode → Bring!: Integration nicht vollständig geladen")
+    if entry is None:
+        _LOGGER.error("Barcode → Bring!: Kein Entry für Webhook '%s' gefunden", webhook_id)
         return
 
-    data: BarcodeBringData = entry.runtime_data
+    # runtime_data sicher prüfen – ist nach setup_entry immer gesetzt
+    try:
+        data: BarcodeBringData = entry.runtime_data
+    except AttributeError:
+        _LOGGER.error("Barcode → Bring!: Integration nicht vollständig geladen")
+        return
 
     if barcode in data.queued_barcodes:
         _LOGGER.debug("Barcode → Bring!: '%s' bereits in Queue, übersprungen", barcode)
@@ -203,7 +220,7 @@ async def _process_barcode(
     """Einen Barcode nachschlagen und in die Bring!-Liste eintragen."""
     bring_list: str = entry.data[CONF_BRING_LIST]
 
-    # Notify-Dienste: Liste – rückwärtskompatibel mit altem Einzelwert-String
+    # Notify-Dienste: rückwärtskompatibel mit altem Einzelwert-String
     notify_raw = entry.data.get(CONF_NOTIFY_SERVICES, [])
     if isinstance(notify_raw, str):
         notify_services: list[str] = [notify_raw]
@@ -214,7 +231,6 @@ async def _process_barcode(
 
     if not produktname or produktname in UNKNOWN_VALUES:
         _LOGGER.info("Barcode → Bring!: Produkt nicht gefunden für '%s'", barcode)
-        # Benachrichtigung an alle konfigurierten Geräte
         for service in notify_services:
             try:
                 notify_domain, notify_name = service.split(".", 1)
