@@ -6,7 +6,9 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components.webhook import async_generate_url
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     SelectOptionDict,
     SelectSelector,
@@ -19,12 +21,12 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CONF_BRING_LIST,
+    CONF_CLOUDHOOK_URL,
     CONF_NOTIFY_SERVICES,
     CONF_USER_NAME,
     CONF_WEBHOOK_ID,
     DOMAIN,
 )
-
 
 def _get_todo_entities(hass: HomeAssistant) -> list[str]:
     """Alle vorhandenen todo-Entities ermitteln."""
@@ -34,7 +36,6 @@ def _get_todo_entities(hass: HomeAssistant) -> list[str]:
         if state.entity_id.startswith("todo.")
     )
 
-
 def _get_notify_services(hass: HomeAssistant) -> list[str]:
     """Alle vorhandenen notify-Dienste ermitteln."""
     return sorted(
@@ -42,7 +43,6 @@ def _get_notify_services(hass: HomeAssistant) -> list[str]:
         for name in (hass.services.async_services().get("notify") or {})
         if name not in ("send_message", "notify", "persistent_notification")
     )
-
 
 def _build_schema(
     todo_entities: list[str],
@@ -96,18 +96,15 @@ def _build_schema(
         }
     )
 
-
 def _parse_notify(raw: Any) -> list[str]:
     """Notify-Eingabe normalisieren (Liste oder kommagetrennte Zeichenkette)."""
     if isinstance(raw, str):
         return [s.strip() for s in raw.split(",") if s.strip()]
     return [s for s in list(raw) if s.strip()]
 
-
 def _validate_bring_list(hass: HomeAssistant, entity_id: str) -> bool:
     """Prüft ob die Todo-Entity existiert."""
     return hass.states.get(entity_id) is not None and entity_id.startswith("todo.")
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config Flow
@@ -166,7 +163,7 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_webhook(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Schritt 2: Webhook-Aktivierungshinweis anzeigen."""
+        """Schritt 2: Fertige Webhook-URL(s) anzeigen."""
         if self._webhook_shown:
             user_name: str = self._data[CONF_USER_NAME]
             return self.async_create_entry(
@@ -175,11 +172,40 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         self._webhook_shown = True
+        webhook_id: str = self._data[CONF_WEBHOOK_ID]
+
+        # Lokale URL – immer verfügbar
+        local_url = async_generate_url(self.hass, webhook_id)
+
+        # Nabu Casa Cloud-URL:
+        # async_create_cloudhook läuft in async_setup_entry – hier nur anzeigen
+        cloud_url: str | None = None
+        try:
+            external = get_url(
+                self.hass,
+                allow_internal=False,
+                allow_ip=False,
+                prefer_cloud=True,
+            )
+            cloud_url = f"{external}/api/webhook/{webhook_id}"
+        except NoURLAvailableError:
+            pass
+
+        if cloud_url:
+            webhook_info = (
+                "**Lokal (nur im Heimnetz):**\n"
+                f"`{local_url}`\n\n"
+                "**Nabu Casa (überall erreichbar, wird automatisch aktiviert):**\n"
+                f"`{cloud_url}`"
+            )
+        else:
+            webhook_info = f"`{local_url}`"
+
         return self.async_show_form(
             step_id="webhook",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "webhook_id": self._data[CONF_WEBHOOK_ID],
+                "webhook_url": webhook_info,
             },
         )
 
@@ -190,7 +216,6 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.OptionsFlow:
         """Options Flow bereitstellen."""
         return BarcodeBringOptionsFlow()
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Options Flow

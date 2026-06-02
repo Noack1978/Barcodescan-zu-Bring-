@@ -9,6 +9,8 @@ from typing import Any
 from typing import TypeAlias
 
 import aiohttp
+from homeassistant.components import cloud
+from homeassistant.components.cloud import CloudNotAvailable
 from homeassistant.components.webhook import (
     async_register as webhook_register,
     async_unregister as webhook_unregister,
@@ -21,6 +23,7 @@ from .const import (
     API_OPENFOOD,
     API_OPENPRODUCTS,
     CONF_BRING_LIST,
+    CONF_CLOUDHOOK_URL,
     CONF_NOTIFY_SERVICES,
     CONF_USER_NAME,
     CONF_WEBHOOK_ID,
@@ -67,11 +70,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry)
         webhook_id,
         _handle_webhook,
         allowed_methods=["POST"],
+        local_only=False,
     )
+
+    # Nabu Casa Cloud-Hook registrieren falls Abo aktiv
+    # Nur wenn noch keine Cloud-URL gespeichert ist
+    if cloud.async_is_logged_in(hass) and CONF_CLOUDHOOK_URL not in entry.data:
+        try:
+            cloudhook_url = await cloud.async_create_cloudhook(hass, webhook_id)
+            new_data = dict(entry.data)
+            new_data[CONF_CLOUDHOOK_URL] = cloudhook_url
+            hass.config_entries.async_update_entry(entry, data=new_data)
+            _LOGGER.info(
+                "Barcode → Bring! (%s): Cloud-Hook registriert: %s",
+                user_name,
+                cloudhook_url,
+            )
+        except CloudNotAvailable:
+            _LOGGER.debug("Barcode → Bring! (%s): Cloud nicht verfügbar", user_name)
 
     _LOGGER.info("Barcode → Bring! (%s): Webhook '%s' registriert", user_name, webhook_id)
 
     return True
+
+async def async_remove_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry) -> None:
+    """Cloud-Hook beim Entfernen der Integration löschen."""
+    if CONF_CLOUDHOOK_URL in entry.data:
+        try:
+            await cloud.async_delete_cloudhook(hass, entry.data[CONF_WEBHOOK_ID])
+        except (CloudNotAvailable, ValueError):
+            pass
 
 async def async_unload_entry(hass: HomeAssistant, entry: BarcodeBringConfigEntry) -> bool:
     """Integration entfernen."""

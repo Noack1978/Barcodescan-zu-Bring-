@@ -11,8 +11,8 @@
         }
       },
       "webhook": {
-        "title": "Webhook aktivieren & Binary Eye einrichten",
-        "description": "**Schritt 1 – Webhook in HA aktivieren:**\n\nGehe zu Einstellungen → Integrationen → Webhooks und aktiviere den Webhook **barcode_bring_{webhook_id}**. Danach wird die vollständige URL dort angezeigt – kopiere sie.\n\n**Schritt 2 – Binary Eye einrichten:**\n\n- Aktionstyp: HTTP-POST\n- URL: *(aus Schritt 1 kopieren)*\n- Content-Type: `application/json`\n- Body: `{\"content\": \"$barcode$\"}`\n\nKlicke auf **Fertig** sobald du Binary Eye eingerichtet hast."
+        "title": "Webhook-URL für Binary Eye",
+        "description": "Trage die URL in Binary Eye ein:\n\n{webhook_url}\n\n**Einstellungen in Binary Eye:**\n- Aktionstyp: HTTP-POST\n- Content-Type: `application/json`\n- Body: `{\"content\": \"$barcode$\"}`\n\nKlicke auf **Fertig** sobald du Binary Eye eingerichtet hast."
       }
     },
     "error": {
