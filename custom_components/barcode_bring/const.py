@@ -7,6 +7,7 @@ CONF_BRING_LIST = "bring_list"
 CONF_NOTIFY_SERVICES = "notify_services"  # Liste statt einzelner String
 CONF_WEBHOOK_ID = "webhook_id"
 CONF_CLOUDHOOK_URL = "cloudhook_url"
+CONF_SUCCESS_NOTIFY = "success_notify"
 
 # API URLs
 API_OPENFOOD = "https://world.openfoodfacts.org/api/v0/product/{}.json"

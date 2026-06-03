@@ -7,7 +7,8 @@
         "data": {
           "user_name": "Name (z. B. Mirko)",
           "bring_list": "Bring!-Liste",
-          "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)"
+          "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)",
+          "success_notify": "Erfolgsmeldung senden (optional)"
         }
       },
       "url": {
@@ -32,7 +33,8 @@
         "data": {
           "user_name": "Name",
           "bring_list": "Bring!-Liste",
-          "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)"
+          "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)",
+          "success_notify": "Erfolgsmeldung senden (optional)"
         }
       },
       "url": {

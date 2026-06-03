@@ -25,6 +25,7 @@ from .const import (
     CONF_BRING_LIST,
     CONF_CLOUDHOOK_URL,
     CONF_NOTIFY_SERVICES,
+    CONF_SUCCESS_NOTIFY,
     CONF_USER_NAME,
     CONF_WEBHOOK_ID,
     DOMAIN,
@@ -218,6 +219,7 @@ async def _process_barcode(
         return
 
     clean_name = re.sub(r"[–—]", "-", produktname).strip()
+    user_name: str = entry.data.get(CONF_USER_NAME, "Unbekannt")
     _LOGGER.info("Barcode → Bring!: Füge '%s' zu '%s' hinzu", clean_name, bring_list)
     await hass.services.async_call(
         "todo",
@@ -226,6 +228,23 @@ async def _process_barcode(
         target={"entity_id": bring_list},
         blocking=True,
     )
+
+    # Erfolgsbenachrichtigung – optional, mit Benutzername
+    if entry.data.get(CONF_SUCCESS_NOTIFY, True):
+        for service in notify_services:
+            try:
+                notify_domain, notify_name = service.split(".", 1)
+                await hass.services.async_call(
+                    notify_domain,
+                    notify_name,
+                    {
+                        "title": f"Barcode → Bring! ({user_name})",
+                        "message": f"{clean_name} wurde zur Einkaufsliste hinzugefügt.",
+                    },
+                    blocking=False,
+                )
+            except Exception as err:
+                _LOGGER.warning("Erfolgsbenachrichtigung an '%s' fehlgeschlagen: %s", service, err)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # APIs

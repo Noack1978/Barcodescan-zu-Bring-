@@ -9,6 +9,7 @@ from homeassistant import config_entries
 from homeassistant.components.webhook import async_generate_url
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -22,6 +23,7 @@ from .const import (
     CONF_BRING_LIST,
     CONF_CLOUDHOOK_URL,
     CONF_NOTIFY_SERVICES,
+    CONF_SUCCESS_NOTIFY,
     CONF_USER_NAME,
     CONF_WEBHOOK_ID,
     DOMAIN,
@@ -46,6 +48,7 @@ def _build_schema(
     current_user_name: str = "",
     current_bring_list: str = "",
     current_notify_services: list[str] | None = None,
+    current_success_notify: bool = True,
 ) -> vol.Schema:
     if current_notify_services is None:
         current_notify_services = []
@@ -80,6 +83,7 @@ def _build_schema(
         ),
         vol.Required(CONF_BRING_LIST, default=bring_default): bring_sel,
         vol.Required(CONF_NOTIFY_SERVICES, default=notify_default): notify_sel,
+        vol.Required(CONF_SUCCESS_NOTIFY, default=current_success_notify): BooleanSelector(),
     })
 
 def _parse_notify(raw: Any) -> list[str]:
@@ -152,6 +156,7 @@ class BarcodeBringConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_USER_NAME: user_name,
                     CONF_BRING_LIST: bring_list,
                     CONF_NOTIFY_SERVICES: notify_services,
+                    CONF_SUCCESS_NOTIFY: bool(user_input.get(CONF_SUCCESS_NOTIFY, True)),
                     CONF_WEBHOOK_ID: f"barcode_bring_{secrets.token_hex(8)}",
                 }
                 return await self.async_step_url()
@@ -216,6 +221,7 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
         current_notify = self.config_entry.data.get(CONF_NOTIFY_SERVICES, [])
         if isinstance(current_notify, str):
             current_notify = [current_notify]
+        current_success_notify: bool = self.config_entry.data.get(CONF_SUCCESS_NOTIFY, True)
 
         if user_input is not None:
             new_user_name = user_input[CONF_USER_NAME].strip()
@@ -234,6 +240,7 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
                 new_data[CONF_USER_NAME] = new_user_name
                 new_data[CONF_BRING_LIST] = new_bring_list
                 new_data[CONF_NOTIFY_SERVICES] = new_notify
+                new_data[CONF_SUCCESS_NOTIFY] = bool(user_input.get(CONF_SUCCESS_NOTIFY, True))
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
                     title=f"Barcode to Bring! ({new_user_name})",
@@ -250,6 +257,7 @@ class BarcodeBringOptionsFlow(config_entries.OptionsFlowWithReload):
                 current_user_name=current_user_name,
                 current_bring_list=current_bring_list,
                 current_notify_services=list(current_notify),
+                current_success_notify=current_success_notify,
             ),
             errors=errors,
         )

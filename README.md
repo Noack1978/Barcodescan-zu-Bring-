@@ -6,7 +6,7 @@
 
 Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** ein. **Keine manuelle YAML-Konfiguration nötig.**
 
-> **v2.1.2** – Webhook-URL im Setup-Dialog, manuelle Nabu Casa Aktivierung
+> **v2.1.3** – Optionale Erfolgsmeldung beim Scan
 
 ---
 
@@ -18,6 +18,7 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 - Push-Benachrichtigung bei unbekanntem Produkt – an **alle** konfigurierten Geräte
 - Serielle Verarbeitung mehrerer Scans über interne Queue – kein Scan geht verloren
 - Doppelscan-Erkennung (gleicher Barcode zweimal schnell hintereinander)
+- Optionale Erfolgsmeldung mit Benutzername nach jedem erfolgreichen Scan
 
 ---
 
@@ -44,7 +45,7 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 
 1. **Einstellungen → Geräte & Dienste → + Integration hinzufügen**
 2. Nach „Barcode → Bring!" suchen
-3. **Schritt 1:** Benutzername eingeben, Bring!-Liste und Benachrichtigungsgeräte wählen
+3. **Schritt 1:** Benutzername, Bring!-Liste, Benachrichtigungsgeräte wählen und Erfolgsmeldung ein-/ausschalten
 4. **Schritt 2:** Die lokale Webhook-URL wird direkt angezeigt → in Binary Eye eintragen → **Fertig**
    - **Mit Nabu Casa:** zusätzlich Hinweis zur Aktivierung sichtbar (siehe unten)
 
@@ -132,10 +133,16 @@ Ersten gefundenen Produktnamen verwenden
 - Kein YAML-Eintrag in `configuration.yaml` erforderlich
 - Kompatibel mit jeder `todo`-Entity (nicht nur Bring!)
 - Mehrere Benutzer möglich – je eine Integration pro Person
+- Erfolgsmeldung ist optional und zeigt Benutzername + Produktname
 
 ---
 
 ## 📋 Changelog
+
+### v2.1.3
+- Optionale Erfolgsmeldung nach jedem erfolgreichen Scan
+- Benachrichtigungstitel enthält den Benutzernamen
+- Ein-/ausschaltbar in Einrichtung und Neukonfiguration
 
 ### v2.1.2
 - Lokale Webhook-URL wird direkt im Setup-Dialog angezeigt
