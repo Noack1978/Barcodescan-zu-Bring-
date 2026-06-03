@@ -5,6 +5,7 @@ import asyncio
 import dataclasses
 import logging
 import re
+import time
 from typing import Any
 from typing import TypeAlias
 
@@ -229,22 +230,23 @@ async def _process_barcode(
         blocking=True,
     )
 
-    # Erfolgsbenachrichtigung – optional, mit Benutzername
+    # Persistente Benachrichtigung in der HA-Seitenleiste – optional
+    # Jede Benachrichtigung bleibt erhalten (eindeutige ID per Zeitstempel)
     if entry.data.get(CONF_SUCCESS_NOTIFY, True):
-        for service in notify_services:
-            try:
-                notify_domain, notify_name = service.split(".", 1)
-                await hass.services.async_call(
-                    notify_domain,
-                    notify_name,
-                    {
-                        "title": f"Barcode → Bring! ({user_name})",
-                        "message": f"{clean_name} wurde zur Einkaufsliste hinzugefügt.",
-                    },
-                    blocking=False,
-                )
-            except Exception as err:
-                _LOGGER.warning("Erfolgsbenachrichtigung an '%s' fehlgeschlagen: %s", service, err)
+        notif_id = f"barcode_bring_{user_name.lower()}_{int(time.time())}"
+        try:
+            await hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": f"Barcode → Bring! ({user_name})",
+                    "message": f"{clean_name} wurde zur Einkaufsliste hinzugefügt.",
+                    "notification_id": notif_id,
+                },
+                blocking=False,
+            )
+        except Exception as err:
+            _LOGGER.warning("Persistente Benachrichtigung fehlgeschlagen: %s", err)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # APIs

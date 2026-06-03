@@ -8,7 +8,7 @@
           "user_name": "Name (z. B. Mirko)",
           "bring_list": "Bring!-Liste",
           "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)",
-          "success_notify": "Erfolgsmeldung senden (optional)"
+          "success_notify": "Persistente Benachrichtigung in der Seitenleiste (optional)"
         }
       },
       "url": {
@@ -34,7 +34,7 @@
           "user_name": "Name",
           "bring_list": "Bring!-Liste",
           "notify_services": "Benachrichtigungsgeraete (mehrere waehlbar)",
-          "success_notify": "Erfolgsmeldung senden (optional)"
+          "success_notify": "Persistente Benachrichtigung in der Seitenleiste (optional)"
         }
       },
       "url": {
