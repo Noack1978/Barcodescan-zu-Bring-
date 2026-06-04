@@ -6,8 +6,6 @@
 
 Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** ein. **Keine manuelle YAML-Konfiguration nötig.**
 
-> **v2.1.3** – Optionale Erfolgsmeldung beim Scan
-
 ---
 
 ## ✅ Was automatisch eingerichtet wird
