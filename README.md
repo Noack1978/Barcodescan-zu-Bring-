@@ -6,6 +6,8 @@
 
 Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automatisch in deine **Bring!-Einkaufsliste** ein. **Keine manuelle YAML-Konfiguration nötig.**
 
+> **v2.1.4** – Icon hinzugefügt
+
 ---
 
 ## ✅ Was automatisch eingerichtet wird
@@ -137,6 +139,9 @@ Ersten gefundenen Produktnamen verwenden
 
 ## 📋 Changelog
 
+### v2.1.4
+- 🎨 Icon hinzugefügt
+
 ### v2.1.3
 - Optionale Erfolgsmeldung nach jedem erfolgreichen Scan
 - Benachrichtigungstitel enthält den Benutzernamen
@@ -148,7 +153,7 @@ Ersten gefundenen Produktnamen verwenden
 - Webhook beim Entfernen der Integration automatisch aufgeräumt
 
 ### v2.1.1
-- Webhook-Name enthält jetzt den Benutzernamen (z. B. "Barcode Scan (Mirko)")
+- Webhook-Name enthält jetzt den Benutzernamen (z. B. „Barcode Scan (Mirko)")
 
 ### v2.1.0
 - Mehrere Benachrichtigungsgeräte gleichzeitig wählbar
