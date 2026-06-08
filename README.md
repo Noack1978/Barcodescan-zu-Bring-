@@ -33,6 +33,8 @@ Barcode scannen mit **Binary Eye** → Home Assistant fügt das Produkt automati
 
 ## 📥 Installation über HACS
 
+[![In HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Noack1978&repository=Barcodescan-zu-Bring-&category=integration)
+
 1. HACS öffnen → **Integrationen** → ⋮ → **Benutzerdefinierte Repositories**
 2. URL eingeben: `https://github.com/Noack1978/Barcodescan-zu-Bring-`
 3. Kategorie: **Integration**
